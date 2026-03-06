@@ -1,0 +1,1423 @@
+---
+title: "Pulse Disturbances from Hurricanes Differentially Structure α- and β-Diversity in Coastal Benthic Communities"
+#format: html
+format: docx 
+author:
+  - name: "Craig R. McClain"
+    affiliation: "Dept. of Biology, University of Louisiana at Lafayette"
+    email: "craig.mcclain@louisiana.edu"
+  - name: "Jacob Badcock"
+    affiliation: "Dept. of Biology, University of Louisiana at Lafayette"
+  - name: "Samuel Copley"
+    affiliation: "Dept. of Biology, University of Louisiana at Lafayette"
+  - name: "Sydney McDermott"
+    affiliation: "Dept. of Biology, University of Louisiana at Lafayette"
+bibliography: references.bib
+csl: ecology.csl
+engine: knitr
+prefer-html: true
+---
+
+```{r load-packages, include=FALSE}
+#### 1. Load Required Packages with Annotations ####
+
+if (!require("pacman")) install.packages("pacman")  # For convenient package loading
+pacman::p_load(
+  
+  # Data manipulation
+  dplyr,       # Data wrangling: filter, mutate, summarize, joins
+  tibble,      # Modern data frames
+  tidyr,       # Pivoting data (long <-> wide), separate columns
+  stringr,     # String manipulation (str_extract, str_trim)
+  lubridate,   # Date handling (as.POSIXct, year/month extraction)
+  
+  # Statistics / Modeling
+  mgcv,        # GAMs / GAMMs
+  nlme,        # Random effects for GAMMs
+  vegan,       # TBI and other diversity metrics
+  hillR,       # Hill numbers for alpha diversity
+  adespatial,  # Temporal Beta-diversity Index (TBI)
+  betapart,    # Beta-diversity calculations
+  mgcv,        # Partial R2
+  
+  # Visualization
+  ggplot2,     # Plotting
+  ggrepel,     # Text labels in ggplot without overlap
+  ggpubr,      # Arranging multiple ggplots (ggarrange)
+  gridExtra,   # Arranging plots (grid.arrange)
+  scales,      # Axis formatting in ggplot
+  grid,        # For low-level plot adjustments
+  geomtextpath, # Plotting hurricane lines and labels
+  
+  # GAM diagnostics / plotting
+  gratia,      # GAM plotting, checking, and residual diagnostics
+  
+  # Reporting / tables
+  knitr,       # kable for tables
+  
+  # Tidying model outputs
+  broom,        # Tidy model outputs into data frames
+  
+  #Webshot needed to render html tables
+  webshot,
+  webshot2
+)
+
+```
+
+```{r}
+#| label: Load Data & Clean
+#| include: false
+
+#### 2. Load Data ####
+
+setwd("~/Dropbox/Terrebonne/Data/TB2B Core Data")
+  
+  core       <- read.csv("TB2B_CoreData.csv")
+  species    <- read.csv("TB2B_Taxa.csv")
+  core_spec  <- read.csv("TB2B_CoreByTaxa_With_Juv.csv")
+  
+#### 3. Data Cleaning & Preparation ####
+
+  # 3.1 Replace NA with 0 in species and core datasets
+      core_spec[is.na(core_spec)] <- 0
+      core[is.na(core)] <- 0
+  
+  # 3.2 Filter out rows with no species counted in core_spec (ignoring Sample.ID)
+      core_spec <- core_spec %>%
+        filter(rowSums(select(., -1)) > 0)
+  
+  # 3.3 Remove 2024 samples from core and filter rows with species counts > 0
+      #core <- core %>% 
+      #  slice(-c(361:407)) %>%
+      #  filter(rowSums(select(., -(1:16), -(31:38))) > 0)
+  
+  # 3.4 Filter cores with Core.Quality > 8
+      core <- core %>% filter(Core.Quality > 8)
+  
+  # 3.5 Synchronize core_spec with filtered core by Sample.ID & Core.Quality
+      core_spec <- core_spec %>%
+      inner_join(core %>% select(Sample.ID, Core.Quality), by = "Sample.ID") %>%
+      filter(Core.Quality > 8) %>%
+      select(-Core.Quality)
+  
+  # 3.6 Convert Collection.Date to POSIXct
+      core <- core %>%
+        mutate(Collection.Date =  as.Date(Collection.Date, format = "%m/%d/%Y"),
+               Collection.Date2 = as.POSIXct(Collection.Date, format = "%m/%d/%Y"),
+               Core.Quality = factor(Core.Quality, levels = c("10", "9", "8", "7")),
+               Months_Since_Hurricane = factor(Months_Since_Hurricane, levels = c("Pre", "1", "2", "3", "4", "5")))
+  
+  # 3.7 Combine Adult + Juvenile counts for species, remove juvenile columns
+        species_bases <- c("Biv.1", "Biv.2", "Biv.3", "Biv.6", "Biv.7", "Biv.9", "Biv.12", "Biv.13",
+          "Biv.15", "Biv.17", "Biv.18", "Gas.1", "Gas.2", "Gas.3", "Gas.4", "Gas.5",
+          "Gas.6", "Gas.7", "Gas.9", "Gas.10", "Gas.11", "Oph.1", "Oph.2", "Oph.3")
+  
+        core_spec_new <- core_spec %>%
+          mutate(across(all_of(species_bases), ~ . + get(paste0(cur_column(), ".juv.")))) %>%
+          select(-matches("\\.juv\\."))
+```
+
+## Abstract
+
+Coastal benthic communities are shaped by a dynamic interplay between pulse disturbances, such as hurricanes, and press stressors, including ongoing environmental variability. We examined a five‑year time series of a benthic community and environmental data from Terrebonne Bay, Louisiana, spanning five major hurricanes. Repeated, high‑intensity hurricanes produced abrupt, short‑term declines in α‑diversity (species richness and Hill numbers), particularly within the first one to three months post‑disturbance. In contrast, temporal β‑diversity exhibited more gradual and context‑dependent responses, with pulses of turnover driven by species losses immediately post‑storm and by gains in subsequent months. After accounting for environmental covariates, hurricane effects on β‑diversity diminished, whereas α‑diversity remained strongly depressed, indicating that compositional shifts are more strongly modulated by background and disturbance-induced environmental changes. Differences in storm intensity, duration, and directness of impact further shaped these responses. Our results highlight that disturbance effects on α‑ and β‑diversity are decoupled in time and mechanism: pulse events rapidly reset richness while longer‑term press drivers and disturbance recovery govern community reorganization. Integrating pulse and press perspectives improves predictions of resilience, recovery, and long‑term stability in coastal ecosystems facing increasing extreme weather under climate change.
+
+## Introduction
+
+The structure of ecological communities is in constant temporal flux. These changes can manifest as shifts in species richness (α-diversity) and changes in community composition that may, when they alter differences among communities, be reflected in β-diversity. However, the relative temporal dynamics of α- and β-diversity remain poorly understood, including whether they respond simultaneously or asynchronously, or if one is consistently more volatile than the other [@dornelas2023; @blowes2019; @lindholm2021]. Recent research indicates that even when α-diversity remains stable, species identities may still be reshuffled, implying that relying on richness alone can mask significant biodiversity change [@dornelas2023b; @blowes2019]. Consequently, some authors [@magurran2019] have argued that trends in richness are insufficient for understanding temporal changes in diversity. Instead, temporal β-diversity should be the primary focus, especially given increasing evidence of local compositional changes in the Anthropocene [@dornelas2023b]. This perspective reflects a broader recognition that univariate metrics, such as species richness, often fail to capture community reorganization [@gotelli2001; @hillebrand2017; @dornelas2014]. Supporting this view, recent efforts including the IPBES-IPCC workshop on “Biodiversity and Climate Change” have emphasized the need to understand and monitor changes in community composition under climate change [@pörtner2021].
+
+Considering α- and β-diversity jointly provides a more comprehensive understanding of the ecological mechanisms underlying community change than examining either metric in isolation. If temporal β-diversity changes but α-diversity does not, i.e. species identities shuffle while richness is maintained, coexistence and diversity-dependent feedback mechanisms remain even as habitat filtering alters which niches are occupied [@baselga2015; @picoche2019; @nakadai2020; @magurran2010]. For example, even when α-diversity remains constant, the loss of long-lived or functionally important species and their replacement by smaller, short-lived ones can substantially alter community composition and ecosystem functioning [@lotze2006; @ogorman2011; @oliver2015]. Conversely, temporal α-diversity can change while β-diversity remains unchanged, reflecting a step wise reduction in richness due to the consistent loss of the same group of species through time. This pattern may arise through several non-exclusive mechanisms. [@germain2018; @kraft2014]. Stronger habitat filtering can exclude species whose physiological tolerances or functional traits no longer match prevailing environmental conditions, reducing the set of species able to persist locally. Changes in environmental context or resource availability can also weaken stabilizing coexistence mechanisms allowing competitively dominant species to exclude others thereby reducing diversity. These processes can also interact: intensified environmental filtering can simultaneously narrow niche space and disrupt coexistence dynamics, producing compounded effects on community structure and diversity.
+
+Even in the absence of major disturbances, communities experience continuous baseline fluctuations due to ecological drift, demographic stochasticity, and small-scale environmental heterogeneity [@gilbert2017; @adler2007; @fung2023], which can lead to temporal changes in α- and β-diversity. Disturbances change communities beyond these baseline fluctuations. Press disturbances, such as climate change, can gradually and consistently alter environmental conditions, exerting long-term pressure on biodiversity [@collins2020; @wang2023; @hu2021]. In contrast, pulse disturbances, such as hurricanes or wildfires, act over short timescales but can induce immediate and substantial shifts in ecological communities, often exceeding the magnitude of natural background fluctuations [@gutiérrez-fonseca2023; @xi2018; @strand2019]. Understanding how communities respond to such discrete, high-intensity events is essential for predicting ecological resilience and recovery especially as the frequency of such events increases due to climate change [@zampieri2025; @campbell2022; @walker2025; @polazzo2024]. Yet, the mechanisms driving post-disturbance changes in α- and β-diversity remain poorly characterized, particularly in marine environments [@mori2018; @myers2015; @tatsumi2020]. Here, we focus on hurricanes as a model pulse disturbance, alongside ongoing press disturbances of coastal land loss, environmental degradation, and climate change, to examine how repeated and sustained environmental changes reshape the marine community of an estuarine bay over time.
+
+Hurricanes cause abrupt and often substantial ecological impacts in coastal ecosystems [@greening2006]. Unlike other ecological disturbances, such as grassland and forest fires, tree falls, or coral bleaching events, hurricanes are frequently studied in isolation rather than as repeated, ecologically predictable events in regions subject to increased hurricane activity [@greening2006]. In the southeastern United States, for example, hurricane frequency has increased since 1996 and is projected to rise further in the coming decades [@emanuel2005; @goldenberg2001; @webster2005]. Notably, hurricanes are now more frequently forming before the official Atlantic season (June 1–November 30), with early-season landfalls and higher-intensity storms becoming more common [@collins2017; @truchelut2022]. The ecological consequences of hurricanes are highly variable, influenced by storm surge, wind intensity, and sediment redistribution [@lugo2008; @schoener2003; @smith2009]. Importantly, storm magnitude alone does not always predict ecological effect: even moderate hurricanes (category 1–3) can induce extensive mortality and reshuffle community composition in areas that have not experienced recent storms [@paerl2001; @mumby2011; @lin2020]. Examining hurricanes as repeated, high-intensity pulse disturbances provides a unique opportunity to understand how abrupt and recurrent environmental perturbations reshape ecological community richness, composition, and overall structure.
+
+Building on this perspective, we examine a five-year dataset of benthic sampling in Terrebonne–Timbalier Bay, Louisiana, capturing the impacts of five major hurricanes: Barry (Category 1, 2019); the sequential storms Laura (Category 4) and Delta (Category 2), which struck within six weeks of one another in 2020; Zeta (Category 3, 2020); and Ida (Category 4, 2021). Using this data set, we aim to address three overarching questions**.**
+
+1.  How do repeated, high-intensity hurricanes affect benthic community α- and β-diversity over time, and are ecological responses consistent across successive events?
+
+2.  To what extent are α- and β-diversity shaped by pulse disturbances such as hurricanes relative to ongoing environmental changes, including seasonal variation, stochastic fluctuations, and longer-term “press” effects?
+
+3.  Do α- and β-diversity exhibit similar or divergent responses across hurricane disturbances, and what do these responses reveal about the roles of niche filtering, species interactions, and diversity-dependent feedbacks during community reorganization?
+
+By addressing these questions, we seek to disentangle the processes driving community reorganization in a system experiencing both recurrent extreme events and sustained environmental pressures.
+
+## Methods
+
+![**Figure 1:** Map of Terrebonne–Timbalier Bay showing benthic sampling locations (TB2B), LUMCON monitoring stations (MC: Marine Center, TB: Terrebonne Bay), and tracks of major hurricanes impacting the region during the study period (2019–2021).](images/Rplot-02.jpeg)
+
+### Sampling Location and Changing Environment
+
+Benthic sampling occurred in Terrebonne Bay, located along the Louisiana Gulf Coast, a broad (1,761 km2) and shallow estuarine bay (average depth 2m, Fig. 1). Terrebonne Bay is separated from the Gulf of Mexico by two barrier island chains, Timbalier Islands and Isles Dernieres and is connected by four tidal passes [@inoue2000]. The bay-estuary complex is part of an abandoned distributary of the Mississippi River. The estuary therefore no longer receives any significant riverine inputs, and the majority of its freshwater inputs are from the local drainage basin [@bianchi2009]. Tides in Terrebonne Bay are diurnal with a semi-diurnal component, ranging 20-80 cm [@inoue2000]. Circulation in the bay is impacted by winds due to shallow depths (\<3m), but strong tidal currents can form where the depth increases near tidal inlets [@inoue2000]. During the winter months, large amounts of sediment accumulation may occur just prior to a cold front passage when the wind blows from the south [@reed1989]. Since Terrebonne Bay has very limited river flow, nutrient limitation is likely to be controlled by the connection between the fringing marsh and sediments within the Bay’s water column. Terrebonne Bay is usually net heterotrophic as a result of low light availability (1% light level penetrates 30% or less of the total water column depth) and high DOC inputs from the surrounding marshes, yet can still maintain daily rates of gross primary production as high as 3-4 g C m-2 d-1 during spring and summer periods (Roberts, unpublished data). This high rate of primary production fuels high secondary production rates and ultimately supports productive fisheries in the bay [@lindstedt2005].
+
+Terrebonne Bay has undergone dramatic landscape change over the past century, driven by a combination of rising relative sea levels, high rates of subsidence, reduced sediment delivery, and intensified storm impacts [@zou2015; @couvillion2017; @blum2023]. Relative sea‑level rise and subsidence in the basin rank among the highest in Louisiana [@jankowski2017], contributing to persistent marsh flooding and rapid loss of wetlands that historically buffered estuarine environments from open‑ocean conditions. In the lower basin, sediment deficits and saltwater intrusion through navigation canals have accelerated erosion and habitat conversion [@day2019], leading to inland migration of marine processes and the transformation of brackish marshes into open water systems. The barrier island systems that once shielded Terrebonne Bay from Gulf wave energy have concurrently diminished due to erosion, storm overwash, and sediment starvation, with some islands experiencing the highest erosion rates and overall loss of barrier land area in the region [@dingler1990]. As these islands shrink and fragment, the protective buffering of interior wetlands and estuarine habitats declines, increasing exposure to storm surge, salinity intrusion, and high‑energy conditions that facilitate further habitat degradation. These historical geomorphic and hydrologic transformations continue to occur and likely exacerbated by ongoing climate change, coastal land loss, and anthropogenic modification.
+
+### Hurricane Events
+
+Our sampling incorporated the impacts of four major hurricane events—Barry (Category 1, 2019), Laura/Delta (Category 4/2, 2020), Zeta (Category 3, 2020), and Ida (Category 4, 2021)—all of which directly affected Terrebonne Bay.
+
+**Hurricane Barry** (July 13, 2019) made landfall between 7 a.m. and 1 p.m. CDT on July 13 near Vermilion Bay as a Category 1 hurricane, with sustained winds around 120.3 km h^-1^ [@brown2019; @li2023]. Although not a direct hit on our sampling site, Terrebonne Bay did experience the “dirty side” or right-front quadrant of the hurricane. The top two surges occurred in Louisiana at Caillou Lake (Dulac, LA) and Caillou Bay (Cocodrie, LA) in Terrebonne Parish near our sampling site, with surges of 2.78 m and 1.99 m, respectively [@brown2019]. The water volume transported during Hurricane Barry was 4 times that of a standard cold front [@huang2020]. Personal observation at the Louisiana Universities Marine Consortium (LUMCON) marine center in Cocodrie, LA post-event confirmed both the height of the storm surges and a considerable amount (\~5 cm) of sediment transport.
+
+**Hurricane Laura** (August 27, 2020) made landfall near Cameron, LA, as a Category 4 system, delivering winds 246.23 km h^-1^ although winds further to the east where the sampling site is located were considerably slower [@nws2020laura]. Similar to Hurricane Barry, our sampling site occurred in the right-front quadrant of the hurricanes. Water levels during Laura increased by 4.29 to 1.64 m around the sample site [@nws2020delta]. LUMCON monitoring station observations in Terrebonne Bay recorded 74 mph sustained winds with gusts up to 107 mph during Laura. Laura traversed the region over a 24–36‐hour period, generating intense wind-driven waves and storm surge. In early October, **Hurricane Delta** (October 4, 2020) made landfall just 20km to the east of Laura as a Category 2 with highest wind speeds 160 km h^-1^ [@nws2020delta]. Although substantially weaker, Delta’s passage reinforced elevated water levels and wave energy at the site, effectively compounding the short-term environmental disturbance initiated by Laura.
+
+**Hurricane Zeta** (October 28, 2020) Hurricane Zeta made landfall in southeastern Louisiana as a Category 3 hurricane, with peak sustained winds near 213 km h^-1^ [@blake2020; @nws2020zeta]. The storm passed directly over the sampling site near Cocodrie, LA, where it made landfall, bringing heavy rainfall, strong winds, and a significant storm surge estimated at 0.61 to 0.91m in the Terrebonne Bay area [@blake2020; @nws2020zeta].
+
+**Hurricane Ida** (August 26, 2021) made landfall near Port Fourchon, LA, as a powerful Category 4 hurricane with peak sustained winds estimated at 240 km/h (150 mph), one of the strongest on record to impact the region [@beven2022]. Ida’s eyewall remained over Terrebonne Bay for approximately 6 to 8 hours, delivering prolonged extreme wind speeds and causing record-breaking storm surge levels that overtopped levees along the Larose–Golden Meadow line [@beven2022]. The storm generated intense rainfall, with some locations recording over 30 cm in less than 24 hours, exacerbating flooding and sediment displacement [@beven2022].
+
+### Sampling Methods
+
+We conducted approximately bi-monthly sampling (2018-2022) of soft-bottom, macrofaunal communities at a site in the middle of Terrebonne Bay (**Fig. 1**). Additional sampling efforts were made pre- and post- hurricane events, when possible, to increase resolution and analyze disturbance effects. During this sampling interval `r length(unique(core$Sample.Event[core$Collection.Date2 < as.POSIXct("2022-12-31")]))` sampling events occurred resulting in `r length(unique(core$Sample.ID    [core$Collection.Date2 < as.POSIXct("2022-12-31")]))` macrofaunal cores. Cores were subsampled from a Wildco 1725-F50 ponar grab (9’’ x 9’’) off a small boat. A total of 2-6 cores (7-cm diameter) were taken from each ponar grab. Total number of cores per grab depended on sediment quality, i.e. total amount of undisturbed sediment taken. Based off of species accumulation curves and prior power analysis, 12+ sub-cores were taken per sampling event to accurately characterize their diversity. The overlying water from the core top along with the top 5 cm of the core were sieved on a 300 μm mesh and preserved in 80% ETOH for later identification of species. Macrofaunal species identification was conducted by trained ecologists with consultation of taxonomic experts.
+
+### Environmental Data
+
+Environmental data from two LUMCON monitoring stations—Terrebonne Bay (Lat: 29.187°N, 90.6093°W) and Marine Center (Lat: 29.25333°N, 90.66333°W)—spanning 2018–2022 were imported and preprocessed using R version 4.5.1 (2025-06-13). We extracted four environmental variables for each sampling location: temperature (°C), salinity (ppt), dissolved oxygen (mg/L), and chlorophyll concentration (µg/L). These variables were included as predictors in all subsequent analyses. After loading the data sets, data type conversions were applied to ensure numerical consistency. The Terrebonne Bay monitoring station is closest to our sampling location but has data collection gaps due to damage from tropical storms, hurricanes, and ship strikes. To estimate these missing values, linear regression models were developed using corresponding Marine Center measurements as predictors for temperature, salinity, dissolved oxygen, and chlorophyll concentrations. Model-predicted values were imputed into the Terrebonne Bay macrofaunal sampling data set. Summary statistics (mean, minimum, maximum, and count) for each parameter were then calculated for a focal time window (1 month before a sampling event) for each sampling time.
+
+### Analyses
+
+Data was processed and analyzed in R version 4.5.1 (2025-06-13). Samples with no observed organisms or with low core quality were excluded. Juvenile counts were combined with adult totals for each species. Collection dates were standardized and used to classify samples by months since major hurricanes (Barry, Laura, Zeta, Ida). All data and R code to generate the analyses and manuscript are available at <https://github.com/crmcclain/terrebonne_benthic>
+
+#### Abundance and α-Diversity
+
+We calculated per-sample diversity using Hill numbers (q = 0, 1, 2). Hill numbers provide a unified framework for quantifying biodiversity while incorporating species abundances. As the order of 𝑞 increases, greater weight is given to the relative abundances of common species. Specifically, q=0 corresponds to species richness, q=1 to the exponential of Shannon entropy, and q=2 to the inverse Simpson index. Hill numbers were computed with the *hill_taxa()* function in the `hillR` R package [@hillR].
+
+To examine the relationships between environmental variables and benthic community metrics, we fitted generalized additive mixed models (GAMMs) using the *gamm*() function from the `mgcv` R package [@mgcv]. GAMMs were used to flexibly model nonlinear relationships between community metrics and environmental variables while accounting for repeated measures across sampling events, allowing us to isolate the effects of hurricanes on abundance and diversity. Response variables included total abundance and Hill numbers calculated per sample. Predictor variables included mean temperature (°C), salinity (ppt), dissolved oxygen (mg L⁻¹), chlorophyll-a (µg L⁻¹), and time since the most recent hurricane. Nonlinear effects of continuous predictors were modeled using smooth terms, while the random effect of sampling event was included to account for the non-independence of multiple cores collected on the same date at a given site**.** Models were estimated using restricted maximum likelihood (REML), and convergence was facilitated with increased iteration limits (maxIter = 100, msMaxIter = 100) and the nlminb optimizer. To examine temporal patterns in benthic abundance and diversity independent of measured environmental drivers, we calculated residuals from the fitted GAMMs for total abundance and Hill numbers. Residuals represent the variation in each response variable that remains after accounting for nonlinear effects of temperature, salinity, dissolved oxygen, chlorophyll-a, and sampling event as a random effect.
+
+#### β-Diversity
+
+To quantify changes in benthic community composition between consecutive sampling events, we calculated Temporal β-diversity Index (TBI) [@legendre2019]. TBI measures the dissimilarity between communities at two time points for the same site or sampling unit. It provides insight into the degree to which species abundances or presences have changed over time, partitioning changes into species Losses (B) and Gains (C). We used the percentage difference inde**x** (quantitative analog of the Sorensen index) to compute TBI for each pair of consecutive sample events, with abundances averaged per sample event. All calculations were performed using the *TBI()* function from the `adespatial` R package [@adespatial].
+
+Because β-diversity metrics were derived from mean of pooled core-level abundances within a sampling event, repeated-measures random effects could not be incorporated. These pooled values were needed for the calculations of the β-diversity metrics. Therefore, we modeled these metrics using generalized additive models (GAMs) with the *gam()* function from package `mgcv` [@mgcv]. Predictor variables included the same environmental and hurricane covariates as in the alpha diversity models. Smooth terms captured nonlinear effects of continuous predictors, and models were fitted using REML.
+
+#### Comparison of α- and β-Diversity
+
+To directly compare hurricane and environmental driven responses of α- and β-diversity, we refitted alpha diversity metrics using GAMs (without random effects, because data were pooled for this) to match the modeling approach applied to beta-diversity. Standardized effect sizes were then extracted for each metric to assess the magnitude and significance of hurricane impacts. This approach allowed us to determine whether short-term, post-hurricane changes were stronger in alpha-diversity or in beta-diversity and to explore the relative contributions of environmental variables versus hurricane timing to observed patterns in benthic community composition.
+
+To visualize the multivariate relationships among benthic community metrics, environmental variables, and hurricane timing, we conducted a multidimensional scaling (MDS) analysis. We standardized all response variables, including total abundance, Hill numbers, beta-diversity metrics (TBI, Losses, Gains), environmental variables (temperature, salinity, dissolved oxygen, chlorophyll-a), and hurricane timing. Hurricane timing was encoded numerically to represent sequential post-disturbance periods. We then computed a Pearson correlation matrix among all standardized variables to quantify pairwise associations. To use the correlations as distances for ordination, we converted the correlation matrix to a dissimilarity matrix. MDS was applied to this dissimilarity matrix using the *cmdscale()* function in R, producing a two-dimensional ordination that preserves the relative distances among variables. The resulting MDS axes were interpreted as relative gradients of correlated responses. Variables that clustered together or aligned along the same axis were positively correlated, whereas variables on opposite ends of an axis were negatively correlated. We note that some response variables, such as Hill numbers of different orders, are inherently correlated; q=1 and q=2 Hill numbers are derived from the same species abundance distributions and thus tend to covary. These correlations are expected and were retained to preserve the ecological gradients represented by each metric.
+
+## Results
+
+### Abundance and α-Diversity
+
+In total, our benthic community data set consisted of `r ncol(core_spec_new) - 1` species and a total of `r prettyNum(sum(core_spec_new[, -1], na.rm = TRUE), big.mark = ",", scientific = FALSE)` individuals across all sampling events. Abundance and individual-based Hill numbers exhibited substantial temporal variability (**Fig. 2**). Total abundance and species richness (Hill number q = 0) showed a general increasing trend over the study period, whereas diversity measures that incorporate evenness (Hill numbers q=1 and q = 2) fluctuated considerably around a relatively stable central value. All metrics declined following hurricane events but generally recovered to pre-disturbance levels. In some cases, post-hurricane rebounds exceeded previous values, e.g., Hill numbers accounting for evenness (q = 1, 2) increased sharply following Hurricane Barry.
+
+```{r}
+#| label: First Plotting and Summary Stats
+#| include: false
+
+#### 4. Define Hurricane Dates & Shaded Year Regions ####
+
+  hurricanes <- tibble(
+    date = as.POSIXct(c("2019-07-12", "2020-08-27", "2020-10-28", "2021-08-29")),
+    name = c("Barry (Cat. 1)", "Laura (Cat. 4)", "Zeta (Cat. 3)", "Ida (Cat. 4)")
+  )
+  
+  shaded_years <- tibble(
+    xmin = as.POSIXct(paste0(2018:2022, "-01-01")),
+    xmax = as.POSIXct(paste0(2019:2023, "-01-01")),
+    ymin = -Inf, ymax = Inf,
+    Year = factor(2018:2022),
+    fill = c("#d9e6f2", "#a6bddb", "#74a9cf", "#2b8cbe", "#08589e")
+  )
+
+#### 5. Summarize Core Data ####
+
+  # Calculate abundance, richness, Shannon diversity, and evenness
+  core_summary <- core %>%
+    select(-Latitude_DD, -Longitude_DD, -Latitude_DMS, -Longitude_DMS, -Station, -Depth_m) %>%
+    mutate(
+      Abundance = log10(rowSums(core_spec_new[-1], na.rm = TRUE) + 1),
+      Richness = specnumber(core_spec_new[-1]),
+      Shannon = diversity(core_spec_new[-1], index = "shannon"),
+      Evenness = if_else(is.na(Shannon / log(Richness)), 0, Shannon / log(Richness)),
+      Hill_q0 = hill_taxa(core_spec_new[, -1], q = 0),
+      Hill_q1 = hill_taxa(core_spec_new[, -1], q = 1),
+      Hill_q2 = hill_taxa(core_spec_new[, -1], q = 2)
+    )
+
+#### 6. Define Custom Plot Theme ####
+
+  theme_craig <- function(show_legend = TRUE) {
+    base <- theme_bw(base_size = 12, base_family = "Helvetica") %+replace%
+      theme(
+        axis.line = element_line(color = "darkgrey"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        strip.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(lineheight = .8, face = "bold", hjust = 0)
+      )
+    if (show_legend) base + theme(legend.position = "right") else base + theme(legend.position = "none")
+  }
+
+#### 7. Helper for Plotting ####
+
+    # Common rectangular year shading and hurricane lines for plots
+    common_plot_layers <- list(
+      geom_rect(data = shaded_years, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = Year),
+                alpha = 0.2, inherit.aes = FALSE),
+      scale_fill_manual(values = setNames(shaded_years$fill, shaded_years$Year)),
+      scale_x_datetime(date_breaks = "3 months", date_labels = "%b", expand = c(0, 0)),
+      coord_cartesian(xlim = as.POSIXct(c("2018-06-01", "2022-12-31"))),
+      geom_vline(data = hurricanes, aes(xintercept = as.numeric(date)),
+                     hjust = 0.5, vjust = 0.5, color = "grey40", size = 1, linetype = "longdash"),
+      geom_smooth(method = "loess", se = FALSE, color = "grey20", span = 0.2, aes(group = 1)),
+      theme_craig(FALSE) + theme(legend.position = "none")
+    )
+    
+    # Plotting function
+        make_plot <- function(data, yvar, ylab_text, alpha_val = 0.8, panel_label = NULL) {
+      ggplot(data, aes(x = Collection.Date2, y = .data[[yvar]])) +
+        geom_point(shape = 16, size = 2, alpha = alpha_val, color = "darkgrey") +
+        labs(x = "Month", y = ylab_text) +
+        common_plot_layers +
+        ggtitle(panel_label) +   # Add the sequential letter as title
+        theme_craig() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    }
+
+#### 8. Generate Basic Plots ####
+
+        
+abundance_plot <- make_plot(core_summary, "Abundance", "Log10 Abundance", 0.6, "A")+
+          geom_text_repel(data=hurricanes, aes(x=date, y=Inf, label=name),
+                      force_pull   = 0, # do not pull toward data points
+    nudge_y      = 0.05,
+    direction    = "x",
+    angle        = 90,
+    hjust        = 0,
+    segment.size = 0.2,
+    max.iter = 1e4, max.time = 1,
+    size=3)
+        
+        
+hill_q0_plot   <- make_plot(core_summary, "Hill_q0", "Richness (q=0)", 0.6, "B")
+hill_q1_plot   <- make_plot(core_summary, "Hill_q1", "Hill-Shannon (q=1)", 0.6, "C")
+hill_q2_plot   <- make_plot(core_summary, "Hill_q2", "Hill-Simpson (q=2)", 0.6, "D")
+
+
+    # Arrange summary plots in 4x1 grid with common legend
+    
+    summary_plots_hill <- ggarrange(
+      abundance_plot,
+      hill_q0_plot,
+      hill_q1_plot,
+      hill_q2_plot,
+      ncol = 1,
+      common.legend = TRUE,
+      legend = "right"
+    )
+
+
+```
+
+```{r}
+#| label: Figure 2 Overall Plots
+#| echo:  FALSE
+#| message: FALSE
+#| fig.cap: "<strong> Figure 2:</strong> Temporal trajectories of per-core (points) (A) abundance and Hill numbers (q = 0, 1, 2; B-D) across all sampling events. Vertical lines indicate the timing of individual hurricanes, while shaded color blocks denote calendar years. A LOESS smooth (black line, span = 0.2) is included to highlight overall temporal trends while preserving short-term fluctuations in the data."
+#| fig.align: center
+#| fig.width: 7
+#| fig.height: 10
+
+# Combine all plots in a row
+summary_plots_hill
+
+```
+
+GAMM results indicated that different environmental variables influenced abundance and α-diversity metrics in distinct ways (**Table 1**). Total abundance was marginally positively associated with salinity, explaining 1% of the deviance. Species richness (Hill number q = 1) was significantly related to both dissolved oxygen and abundance, which explained 2.6% and 57.5% of deviance, respectively. Hill numbers incorporating evenness (q = 1, 2) were primarily driven by abundance, but also significantly related to chlorophyll, although it explained only \~3% of variation. Overall, and unsurprisingly, abundance emerged as a consistent and strongest predictor across all diversity measures. Environmental factors such as dissolved oxygen had significant or marginal effects on lower-order Hill numbers, whereas chlorophyll-a influenced higher-order Hill numbers more selectively.
+
+```{r}
+#| label: Environmental GAMMS for Alpha
+#| include: false
+
+ # 9.1 Recode and factor hurricane timing and season
+      core_summary2<- core_summary %>%
+        mutate(
+          Months_Since_Hurricane = case_when(
+            Months_Since_Hurricane == "Pre" ~ "Pre",
+            Months_Since_Hurricane %in% c("1", "2", "3") ~ "1-3",
+            Months_Since_Hurricane %in% c("4", "5") ~ "4-5"
+          ),
+          Months_Since_Hurricane = factor(Months_Since_Hurricane, levels = c("Pre", "1-3", "4-5")),
+          Season = factor(Season, levels = c("Spring", "Summer", "Fall", "Winter"))
+        )
+      
+  # 9.2 GAMM models 
+      
+
+    # Fit Abundance GAMM
+    gamm_abun <- gamm(
+      formula = Abundance ~ s(mean_temp_F) + s(mean_salinity_ppt) + s(mean_DO_mg.L) + 
+      s(mean_chlorophyll_ug.L) +  Months_Since_Hurricane,
+      random = list(Sample.Event = ~1),
+      data = core_summary2, method = "REML",
+      control = lmeControl(opt = "nlminb", maxIter = 100, msMaxIter = 100))
+    
+     # Fit Hill q0 GAMM
+      gamm_q0 <- gamm(
+      formula = Hill_q0  ~ s(mean_temp_F) + s(mean_salinity_ppt) + s(mean_DO_mg.L) + s(Abundance) +
+      s(mean_chlorophyll_ug.L) +  Months_Since_Hurricane,
+      random = list(Sample.Event = ~1),
+      data = core_summary2, method = "REML",
+      control = lmeControl(opt = "nlminb", maxIter = 100, msMaxIter = 100))
+      
+    
+     # Fit Hill q1 GAMM
+    gamm_q1 <- gamm(
+      formula = Hill_q1  ~ s(mean_temp_F) + s(mean_salinity_ppt) + s(mean_DO_mg.L) + s(Abundance) +
+      s(mean_chlorophyll_ug.L) +  Months_Since_Hurricane,
+      random = list(Sample.Event = ~1),
+      data = core_summary2, method = "REML",
+      control = lmeControl(opt = "nlminb", maxIter = 100, msMaxIter = 100))
+      
+    
+     # Fit Hill q2 GAMM
+    gamm_q2 <- gamm(
+      formula = Hill_q2 ~ s(mean_temp_F) + s(mean_salinity_ppt) + s(mean_DO_mg.L) + s(Abundance) +
+      s(mean_chlorophyll_ug.L) +  Months_Since_Hurricane,
+      random = list(Sample.Event = ~1),
+      data = core_summary2, method = "REML",
+      control = lmeControl(opt = "nlminb", maxIter = 100, msMaxIter = 100))
+
+    
+   # 9.3 Function to summarize GAMM models
+summarize_gamm_model <- function(model, model_name) {
+  sm <- summary(model$gam)
+  
+  reml_score <- if (is.numeric(model$gam$gcv.ubre)) {
+    round(model$gam$gcv.ubre, 3)
+  } else {
+    NA
+  }
+  
+  data.frame(
+    Model = model_name,
+    Term = rownames(sm$s.table),
+    EDF = round(sm$s.table[, "edf"], 2),
+    `F-stat` = round(sm$s.table[, "F"], 2),
+    `p-value` = signif(sm$s.table[, "p-value"], 3),
+    check.names = FALSE
+  )
+}
+
+#9.3.5 Function to compute approximate partial R² for each smooth term in a GAM
+      partial_r2_gam <- function(gam_model) {
+        # Get summary of the GAM
+        sm <- summary(gam_model)
+        
+        # Extract smooth term names
+        terms <- rownames(sm$s.table)
+        
+        # Residual degrees of freedom
+        df_resid <- sm$residual.df
+        
+        # Approximate partial R² for each smooth: F * EDF / (F * EDF + residual df)
+        partial_r2 <- (sm$s.table[, "F"] * sm$s.table[, "edf"]) / 
+                      (sm$s.table[, "F"] * sm$s.table[, "edf"] + df_resid)
+        
+        # Return as a named vector
+        names(partial_r2) <- terms
+        return(round(partial_r2, 3))
+      }
+    
+      
+     # 9.4 Generate summaries and combine into one table
+      abun_summary  <- summarize_gamm_model(gamm_abun,  "Abundance")
+      hill0_summary    <- summarize_gamm_model(gamm_q0,  "Richness (q=0)")
+      hill1_summary   <- summarize_gamm_model(gamm_q1,  "Hill-Shannon (q=1)")
+      hill2_summary    <- summarize_gamm_model(gamm_q2,  "Hill-Simpson (q=2)")
+      
+     # Compute partial R² separately
+        abun_summary$Partial_R2  <- partial_r2_gam(gamm_abun$gam)[abun_summary$Term]
+        hill0_summary$Partial_R2 <- partial_r2_gam(gamm_q0$gam)[hill0_summary$Term]
+        hill1_summary$Partial_R2 <- partial_r2_gam(gamm_q1$gam)[hill1_summary$Term]
+        hill2_summary$Partial_R2 <- partial_r2_gam(gamm_q2$gam)[hill2_summary$Term]
+
+# Combine into one table
+      model_stats_table <- dplyr::bind_rows(abun_summary, hill0_summary, hill1_summary,
+                                            hill2_summary) %>%
+        dplyr::filter(`p-value` <= 0.10)%>%
+        rename(`Partial R.sq` = Partial_R2)
+
+```
+
+```{r}
+#| label: Table 1 GAMMS
+#| echo: false
+      
+    # 9.5 Pretty Kable Table
+      
+ model_stats_table %>%
+  mutate(Term = case_when(
+    Term == "s(mean_salinity_ppt)" ~ "Salinity",
+    Term == "s(mean_DO_mg.L)" ~ "Dissolved oxygen",
+    Term == "s(Abundance)" ~ "Abundance",
+    Term == "s(mean_chlorophyll_ug.L)" ~ "Chlorophyll",
+    TRUE ~ Term  # keep any other terms unchanged
+  )) %>%
+  knitr::kable(
+    row.names = FALSE,
+    caption = "<strong>Table 1:</strong> Summary of generalized additive mixed models (GAMMs) for abundance and Hill numbers (q = 0, 1, 2). Only terms with p ≤ 0.10 are shown. The table includes estimated effective degrees of freedom (EDF), F-statistics,snd p-values. Models account for the random effect of sampling event. Residuals degrees of freedom for abundance and Hill numbers (q = 0, 1, 2) are 394.4, 389.7, 386.3, and 387.1 respectively.",
+    digits = 3,
+    format = "pandoc",  # ensures Word compatibility
+    booktabs = TRUE
+  )
+ 
+```
+
+Visual inspection of the raw, uncorrected (i.e., before accounting for environmental variables) data revealed clear declines in abundance and Hill numbers following hurricanes, with some evidence of partial recovery approximately 4–5 months post-disturbance (**Fig. 3**). After accounting for environmental effects, residual impacts of hurricanes on benthic communities were evident in both abundance and α-diversity metrics (**Table 2)**. Total abundance decreased significantly in the first 1–3 months post-hurricane and remained lower in months 4–5. Richness (q = 0) showed strong declines during months 1–3 and months 4–5, indicating substantial short-term losses in the number of species. Higher-order Hill numbers also declined significantly following hurricanes. Hill number q = 1 decreased in both months 1–3 and 4–5 post-disturbance, while Hill number q = 2 showed significant declines across both time intervals, although effect sizes were smaller than for richness. Overall, these results suggest that hurricanes produced immediate reductions in abundance and richness, with the strongest effects occurring within the first three months, while impacts on evenness occurring over longer time frames.
+
+```{r}
+#| label: Hurricane Table Calculations
+#| include: false
+
+# 10.1 Function to extract parametric coefficients from a gamm object
+extract_param_coeff <- function(model, model_name) {
+  tidy_df <- broom::tidy(model$gam, parametric = TRUE) %>%
+    mutate(Model = model_name) %>%
+    select(Model, term, estimate, std.error, statistic, p.value)
+  
+  return(tidy_df)
+}
+
+# 10.2 Apply to models
+param_abun <- extract_param_coeff(gamm_abun, "Abundance")
+param_q0   <- extract_param_coeff(gamm_q0, "Richness (q=0)")
+param_q1   <- extract_param_coeff(gamm_q1, "Hill-Shannon (q=1)")
+param_q2   <- extract_param_coeff(gamm_q2, "Hill-Simpson (q=2)")
+
+# 10.3  Combine into a single table
+param_table <- bind_rows(param_abun, param_q0, param_q1, param_q2)
+
+# 10.4 Clean param_table
+param_table_clean <- param_table %>%
+  filter(term != "(Intercept)") %>%  # drop intercept
+  mutate(
+    Term = recode(term,
+                  "Months_Since_Hurricane1-3" = "Months 1-3",
+                  "Months_Since_Hurricane4-5" = "Months 4-5"),
+    Model = Model,
+    Estimate = estimate,
+    `Std. error` = std.error,
+    `T-value` = statistic,
+    `P-value` = p.value
+  ) %>%
+  select(Model, Term, Estimate, `Std. error`, `T-value`, `P-value`)
+
+```
+
+```{r}
+#| label: Hurricane Table 2
+#| echo: false
+
+# 10.5 Create kable with formatting
+param_table_clean %>%
+  knitr::kable(
+    digits = 3,
+    col.names = c("Model", "Term", "Estimate", "Std. error", "T-value", "P-value"),
+    caption = "Table 2: Parametric coefficients from GAMMs for Months Since Hurricane for abundance and Hill metrics (q = 0, 1, 2). Intercept not shown.  Residuals degrees of freedom for abundance and Hill numbers (q = 0, 1, 2) are 394.4, 389.7, 386.3, and 387.1 respectively. Each factor level term has 1 df.",
+    booktabs = TRUE,
+    format = "pandoc"
+  )
+
+
+
+```
+
+```{r}
+#| label: Figure 3 Hurricane Effects
+#| echo:  FALSE
+#| message: FALSE
+#| fig.cap: "<strong> Figure 3: </strong>Temporal distributions of per-core (A) abundance and Hill numbers (q = 0, 1, 2; B-D) across months since hurricanes. Boxplots show the range, interquartile spread, and outliers for each metric. These values are raw, uncorrected for environmental covariates, so they reflect the total observed variation in each metric following hurricanes."
+#| fig.align: center
+#| fig.width: 8
+#| fig.height: 4
+
+
+# 10.6 Gather the data into long format
+core_long <- core_summary2 %>%
+  select(Months_Since_Hurricane, Abundance, Hill_q0, Hill_q1, Hill_q2) %>%
+  pivot_longer(
+    cols = c(Abundance, Hill_q0, Hill_q1, Hill_q2),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Metric = recode(Metric,
+                    Abundance = "Log10 Abundance",
+                    Hill_q0 = "Richness (q=0)",
+                    Hill_q1 = "Hill-Shannon (q=1)",
+                    Hill_q2 = "Hill-Simpson (q=2)"),
+    Metric = factor(Metric, levels = c("Log10 Abundance", "Richness (q=0)", "Hill-Shannon (q=1)", "Hill-Simpson (q=2)"))
+  )
+
+
+
+# Create a small dataframe with letters for each facet
+facet_letters <- core_long %>%
+  distinct(Metric) %>%           # one row per metric
+  arrange(Metric) %>%
+  mutate(
+    Letter = c("A", "B", "C", "D"),   # one letter per metric
+    x = 0.5,                          # middle of x axis
+    y = core_long %>%
+          group_by(Metric) %>%
+          summarise(max_val = max(Value, na.rm = TRUE)) %>%
+          pull(max_val) * 1.05        # 5% above max for that metric
+  )
+
+
+# 10.7 Create the boxplots
+ggplot(core_long, aes(x = factor(Months_Since_Hurricane), y = Value)) +
+  geom_boxplot(fill = "steelblue3", outlier.color = "grey30") +
+  facet_wrap(~Metric, scales = "free_y") +  # free_y to allow different y-axis scales
+  labs(
+    x = "Months Since Hurricane",
+    y = "Value",
+  ) +
+  theme_craig() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.border = element_rect(color = "grey20", fill = NA, linewidth = 0.5)
+  )+
+   geom_text(data = facet_letters,
+    aes(x = x, y = y, label = Letter),
+    inherit.aes = FALSE,
+    fontface = "bold",
+    hjust = 0
+  ) 
+
+```
+
+### β-Diversity
+
+Visually, temporal β-diversity (TBI) revealed pulses of community turnover following major hurricane disturbances (**Fig. 4**). The largest increase in TBI occurred after Hurricane Barry (2019), indicating the strongest single-event disruption to benthic community structure across the time series. Additional but smaller TBI increases followed Hurricanes Zeta (2020) and Ida (2021). After Ida, TBI initially declined toward December 2021 but then rose sharply again the following spring, suggesting a delayed secondary reorganization of the community. Patterns in the “Proportional Loss” component showed four relatively similar peaks in the time series corresponding directly after Hurricanes Barry and Ida and then again 6-7 months post both hurricanes. Losses increased moderately after the Laura and Zeta period but were relatively small compared to Barry and Ida. Following Ida, losses surged sharply, then dropped quickly through the winter, before rising again to another major peak in spring 2022. “Proportional Gains” showed a complementary but distinct pattern. Gains increased steadily from September through December 2019 after Barry, indicating species additions or abundances increases following the disturbance. Modest gain-driven turnover occurred from January–March after the Laura and Zeta hurricanes. A substantial pulse of gains emerged again from December 2021 through March 2022 following Ida, demonstrating a strong influx or proliferation of taxa. Together, these results indicate that hurricanes consistently correlated with elevated temporal turnover, but the mechanisms differed among events. Barry was strongly loss-driven, Ida showed a mix of immediate loss and delayed gain-driven turnover, and several large transitions, particularly in summer 2020 and spring 2022, occurred well delayed of immediate storm impacts.
+
+```{r}
+#| label: Temporal Beta Diversity Set Up
+#| include: false
+
+
+#11.1 Convert to triplet (long) format
+  core_spec_long <- core_spec_new %>%
+    pivot_longer(
+      cols = -Sample.ID,           # all columns except Sample.ID
+      names_to = "Species",        # new column for species
+      values_to = "Abundance"      # new column for abundance
+    ) %>%
+    filter(Abundance > 0)      %>%  # remove rows with zero abundance
+    separate(
+      Sample.ID,
+      into = c("Site", "Sample.Event", "CoreNumber"),  # split into three parts
+      sep = "-",                                       # delimiter is "-"
+      remove = FALSE                                  # keep original Sample.ID
+    )   
+
+#11.2 Summarize abundance per sample event
+  sample_events_spec <- core_spec_long %>%
+    group_by(Species,Sample.Event) %>%   
+    summarise(
+      Ab_mean = round(mean(Abundance, na.rm = TRUE), 2),
+      Ab_sd   = round(sd(Abundance, na.rm = TRUE), 2),
+      Ab_se   = round(sd(Abundance, na.rm = TRUE) / sqrt(n()), 2),
+      Ab_n_species      = n(),   # number of cores with non-zero abundance
+      .groups = "drop"
+    )
+
+#11.3  Convert back to wide format
+  sample_events_wide <- sample_events_spec %>%
+    select(Sample.Event, Species, Ab_mean) %>%  # keep only what we need
+    pivot_wider(
+      names_from = Species,     # species become columns
+      values_from = Ab_mean,    # cell values are mean abundance
+      values_fill = 0           # fill missing combinations with 0
+    )
+
+#11.4 Sample Event Summary
+  sample_event_summary <- core_summary2 %>%
+  group_by(Sample.Event) %>%
+  summarise(
+    # Contextual / environmental data (take first since constant within event)
+    Year = first(Year),
+    Month = first(Month),
+    Season = first(Season),
+    Months_Since_Hurricane = first(Months_Since_Hurricane),
+    mean_temp_C = first(mean_temp_C),
+    mean_salinity_ppt = first(mean_salinity_ppt),
+    mean_DO_mg.L = first(mean_DO_mg.L),
+    mean_chlorophyll_ug.L = first(mean_chlorophyll_ug.L),
+    Date = first(Collection.Date),
+    
+    # Community metrics across cores
+    n_cores = n(),
+    Abundance_mean = mean(Abundance, na.rm = TRUE),
+    Abundance_sd   = sd(Abundance, na.rm = TRUE),
+    Hill_q0_mean   = mean(Hill_q0, na.rm = TRUE),
+    Hill_q0_sd     = sd(Hill_q0, na.rm = TRUE),
+    Hill_q1_mean   = mean(Hill_q1, na.rm = TRUE),
+    Hill_q1_sd     = sd(Hill_q1, na.rm = TRUE),
+    Hill_q2_mean   = mean(Hill_q2, na.rm = TRUE),
+    Hill_q2_sd     = sd(Hill_q2, na.rm = TRUE),
+    Richness_mean  = mean(Richness, na.rm = TRUE),
+    Shannon_mean   = mean(Shannon, na.rm = TRUE),
+    Evenness_mean  = mean(Evenness, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Standard errors
+    Abundance_se = Abundance_sd / sqrt(n_cores),
+    Hill_q0_se   = Hill_q0_sd / sqrt(n_cores),
+    Hill_q1_se   = Hill_q1_sd / sqrt(n_cores),
+    Hill_q2_se   = Hill_q2_sd / sqrt(n_cores)
+  )
+
+  sample_event_summary <- sample_event_summary %>%
+  mutate(Date = as.POSIXct(Date))
+
+#11.5 Create numeric ordering from Sample.Event (e.g., "18.6" → Year = 2018, Month = 6)
+sample_events_wide <- sample_events_wide %>%
+  mutate(
+    Year = 2000 + as.integer(str_extract(Sample.Event, "^[0-9]{2}")),  # assume 2000+year
+    Month = as.integer(str_extract(Sample.Event, "(?<=\\.)[0-9]{1,2}")),
+    Order = Year + Month/12
+  ) %>%
+  arrange(Order)
+
+#11.6 Identify species columns
+species_cols <- setdiff(names(sample_events_wide), c("Sample.Event", "Year", "Month", "Order"))
+```
+
+```{r}
+#| label: Temporal Beta Diversity Calculations
+#| include: false
+
+
+#11.7 # Initialize vectors to store outputs
+TBI_values <- rep(NA, nrow(sample_events_wide))
+B_prop_values  <- rep(NA, nrow(sample_events_wide))
+C_prop_values  <- rep(NA, nrow(sample_events_wide))
+D_values      <- rep(NA, nrow(sample_events_wide))
+TBI_change     <- rep(NA, nrow(sample_events_wide))
+TBI_t_test     <- rep(NA, nrow(sample_events_wide))
+
+#11.8 Loop through consecutive events
+for(i in 2:nrow(sample_events_wide)) {
+  mat1 <- as.matrix(sample_events_wide[i - 1, species_cols])
+  mat2 <- as.matrix(sample_events_wide[i, species_cols])
+  
+  tbi_res <- TBI(mat1, mat2, method = "%difference", nperm = 0, test.BC=TRUE)
+  
+   # Assign results
+  TBI_values[i]    <- tbi_res$TBI
+  B_prop_values[i] <- tbi_res$BCD.mat[, "B/(2A+B+C)"]
+  C_prop_values[i] <- tbi_res$BCD.mat[, "C/(2A+B+C)"]
+  D_values[i]      <- tbi_res$BCD.mat[, "D=(B+C)/(2A+B+C)"]
+  TBI_change[i]    <- tbi_res$BCD.mat[, "Change"]
+  TBI_t_test[i]    <- tbi_res$t.test_B.C
+  
+}
+
+#11.9 Add TBI to summary table
+sample_event_summary$TBI        <- TBI_values
+sample_event_summary$B_prop     <- B_prop_values
+sample_event_summary$C_prop     <- C_prop_values
+sample_event_summary$D          <- D_values
+sample_event_summary$Change     <- TBI_change
+sample_event_summary$TBI_t_test <- TBI_t_test
+```
+
+```{r}
+#| label: Figure 4 Beta Div Plot
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: center
+#| fig.cap: "<strong> Figure 4:</strong> Temporal β-diversity dynamics of the benthic community across the study period. (A) Temporal Beta-diversity Index (TBI) calculated between consecutive sampling events, representing the overall magnitude of community turnover. (B) Proportional contributions of Losses (B-components) and (C) Gains (C-components) to total compositional change. Points represent individual sampling events."
+#| fig-height: 10
+#| fig-width: 7
+
+
+TBI_plot <- ggplot(sample_event_summary, aes(x = Date, y = TBI)) +
+        geom_point(shape = 16, size = 2, alpha = .6, color = "darkgrey") +
+        labs(x = "Month", y = "Temporal Beta-Diversity (TBI)", , title="A") +
+        common_plot_layers +
+        ggtitle("A") +
+        theme_craig() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+      geom_text_repel(data=hurricanes, aes(x=date, y=Inf, label=name),
+                      force_pull   = 0, # do not pull toward data points
+                      nudge_y      = 0.05, direction    = "x", angle        = 90, 
+                      hjust        = 0, segment.size = 0.2, max.iter = 1e4, max.time = 1,
+                      size=3)
+    
+Losses_plot <- ggplot(sample_event_summary, aes(x = Date, y = B_prop)) +
+        geom_point(shape = 16, size = 2, alpha = .6, color = "darkgrey") +
+        labs(x = "Month", y = "Proportional Losses (B)", title="B") +
+        common_plot_layers +
+        ggtitle("B") +
+        theme_craig() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+Gaines_plot <- ggplot(sample_event_summary, aes(x = Date, y = C_prop)) +
+        geom_point(shape = 16, size = 2, alpha = .6, color = "darkgrey") +
+        labs(x = "Month", y = "Proportional Gains (C)", title="C") +
+        common_plot_layers +
+        theme_craig() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+sample_event_summary <- sample_event_summary %>%
+  mutate(
+    Change_clean = str_trim(Change),   # remove leading/trailing spaces
+    Change_arrow = case_when(
+      Change_clean == "+" ~ 1,
+      Change_clean == "-" ~ -1,
+      Change_clean == "0" ~ 0,
+      TRUE                ~ 0
+    )
+  )
+
+
+ggarrange(TBI_plot, Losses_plot, Gaines_plot, ncol=1, common.legend = TRUE, legend = "right")
+
+```
+
+```{r}
+#| label: Environmental GAMMS for Beta
+#| message: false
+#| warning: false
+#| include: false
+
+      
+  # 12.2 GAMM models 
+      
+
+    # Fit TBI
+    gam_TBI <- gam(TBI ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+                    s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+                    data = sample_event_summary,
+                    method = "REML")
+    
+     # Fit Losses
+      gam_B_prop <- gam(B_prop ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+                    s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+                    data = sample_event_summary,
+                    method = "REML")
+      
+    
+     # Fit Gains
+    gam_C_prop  <- gam(C_prop ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+                    s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+                    data = sample_event_summary,
+                    method = "REML")
+      
+    #12.3 function for summarizing gam
+            summarize_gam_model <- function(model, model_name) {
+          if (!"gam" %in% class(model)) stop("Model must be a gam object")
+          
+          sm <- summary(model)
+          
+          data.frame(
+            Model = model_name,
+            Term = rownames(sm$s.table),
+            EDF = round(sm$s.table[, "edf"], 2),
+            `F-stat` = round(sm$s.table[, "F"], 2),
+            `p-value` = signif(sm$s.table[, "p-value"], 3),
+            `R.sq (explained deviance)` = round(sm$r.sq, 3),
+            check.names = FALSE
+          )
+        }
+
+  
+   
+            
+    # 12.4 Generate summaries for beta-diversity GAMs
+TBI_summary    <- summarize_gam_model(gam_TBI,   "TBI")
+B_prop_summary <- summarize_gam_model(gam_B_prop, "Losses")
+C_prop_summary <- summarize_gam_model(gam_C_prop, "Gains")
+
+# Compute partial R² separately
+TBI_summary$Partial_R2    <- partial_r2_gam(gam_TBI)[TBI_summary$Term]
+B_prop_summary$Partial_R2 <- partial_r2_gam(gam_B_prop)[B_prop_summary$Term]
+C_prop_summary$Partial_R2 <- partial_r2_gam(gam_C_prop)[C_prop_summary$Term]
+
+# Combine into one table
+beta_model_stats_table <- dplyr::bind_rows(TBI_summary, B_prop_summary, C_prop_summary) %>%
+  dplyr::filter(`p-value` <= 0.10) %>%
+  select(-`R.sq (explained deviance)`) %>%
+  rename(`Partial R.sq` = Partial_R2)
+
+
+```
+
+```{r}
+#| label: Table 3 GAMS for Beta
+#| echo: false
+      
+    # 12.5 Pretty Kable Table
+      
+beta_model_stats_table %>%
+  mutate(Term = case_when(
+    Term == "s(mean_salinity_ppt)" ~ "Salinity",
+    Term == "s(mean_DO_mg.L)" ~ "Dissolved oxygen",
+    Term == "s(mean_temp_C)" ~ "Temperature",
+    Term == "s(mean_chlorophyll_ug.L)" ~ "Chlorophyll",
+    TRUE ~ Term  # keep any other terms unchanged
+  )) %>%
+  knitr::kable(
+    row.names = FALSE,
+    caption = "<strong>Table 3</strong>: Summary of generalized additive mixed models (GAMs) for Temporal Beta-diversity Index (TBI), proportional contributions of Losses (B-components) and Gains (C-components). Only terms with p ≤ 0.10 are shown. The table includes estimated effective degrees of freedom (EDF), F-statistics, p-values, and the proportion of explained deviance (R²). Residual degrees of freedom for TBI, Losses, and Gaines are 14.9, 16.6, and 19.4.",
+    digits = 3,
+    booktabs = TRUE,
+    format = "pandoc"
+  )
+```
+
+GAM results indicated that different environmental variables influenced temporal β-diversity and its components in distinct ways (**Table 3)**. TBI was strongly influenced by dissolved oxygen, which explained the largest proportion of variation (partial R² = 0.53) despite its marginal significance, while temperature also contributed substantially and was statistically significant (partial R² = 0.42). “Proportional Losses” were significantly related to temperature, which explained 42% of the variation in Losses. Overall, temperature consistently predicted compositional changes, whereas dissolved oxygen, despite explaining a large fraction of variation, showed more variability across responses. In contrast, none of the measured environmental variables were significant predictors of “Proportional Gains”.
+
+```{r}
+#| label: Figure 5 Hurricane Effects
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: center
+#| fig-cap: "<strong> Figure 5:</strong> Distributions for (A) Temporal Beta-diversity Index (TBI), proportional contributions of (B) Losses (B-components) and (C) Gains (C-components) across months since hurricanes. Boxplots show the range, interquartile spread, and outliers for each metric. These values are raw, uncorrected for environmental covariates, so they reflect the total observed variation in each metric following hurricanes."
+#| fig-height: 4
+#| fig-width: 8
+
+
+# 13.1. Gather the beta-diversity metrics into long format
+beta_long <- sample_event_summary %>%
+  select(Months_Since_Hurricane, TBI, B_prop, C_prop) %>%
+  pivot_longer(
+    cols = c(TBI, B_prop, C_prop),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Metric = recode(Metric,
+                    TBI = "Temporal Beta-Diversity (TBI)",
+                    B_prop = "Proportional Losses (B)",
+                    C_prop = "Proportional Gains (C)"),
+    Metric = factor(Metric, levels = c(
+      "Temporal Beta-Diversity (TBI)",
+      "Proportional Losses (B)",
+      "Proportional Gains (C)"
+    ))
+  )
+
+# Create letters for each facet
+facet_letters2 <- beta_long %>%
+  distinct(Metric) %>%
+  arrange(Metric) %>%
+  mutate(
+    Letter = c("A", "B", "C"),  # adjust based on number of facets
+    x = 0.5,  # middle of x-axis
+    y = sapply(Metric, function(m) max(beta_long$Value[beta_long$Metric == m], na.rm = TRUE) * 1.05)  # top of each facet ignoring NAs
+  )
+
+
+
+# 13.2. Create boxplots for beta-diversity metrics
+ggplot(beta_long, aes(x = factor(Months_Since_Hurricane), y = Value)) +
+  geom_boxplot(fill = "steelblue3", outlier.color = "grey30") +
+  facet_wrap(~Metric, scales = "free_y") +  # allows each metric to have its own y-axis scale
+  labs(
+    x = "Months Since Hurricane",
+    y = "Value"
+  ) +
+  theme_craig() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )+
+   geom_text(
+    data = facet_letters2,
+    aes(x = x, y = y, label = Letter),
+    inherit.aes = FALSE,
+    fontface = "bold",
+    hjust = 0
+  ) 
+
+```
+
+Visual inspection of the temporal β-diversity metrics (**Fig. 5**) revealed distinct patterns following hurricane events. TBI increased from pre-disturbance to months 1–3 and further to months 4–5, indicating progressive compositional change over time. “Proportional Losses” were slightly elevated in the first 1–3 months post-hurricane but declined sharply by months 4–5, whereas “Proportional Gains” remained relatively stable from pre-disturbance to 1–3 months but increased markedly by months 4–5. Consequently, TBI in the early post-hurricane interval (1–3 months) appears primarily driven by species losses, whereas compositional change at months 4–5 was dominated by species gains.
+
+```{r}
+#| label: Hurricane Table 4 for Beta-Diversity
+#| echo: false
+
+# 14.1 Function to extract parametric coefficients from a gam object
+extract_param_coeff_gam <- function(model, model_name) {
+  tidy_df <- broom::tidy(model, parametric = TRUE) %>%
+    mutate(Model = model_name) %>%
+    select(Model, term, estimate, std.error, statistic, p.value)
+  return(tidy_df)
+}
+
+# 14.2 Apply to your GAMs
+param_TBI <- extract_param_coeff_gam(gam_TBI, "TBI")
+param_B   <- extract_param_coeff_gam(gam_B_prop, "Losses (B-Components)")
+param_C   <- extract_param_coeff_gam(gam_C_prop, "Gains (C-Components)")
+
+# 14.3 Combine into a single table
+param_table_beta <- bind_rows(param_TBI, param_B, param_C)
+
+# 14.4 Clean param_table for presentation
+param_table_clean_beta <- param_table_beta %>%
+  filter(term != "(Intercept)") %>%  # drop intercept
+  mutate(
+    Term = recode(term,
+                  "Months_Since_Hurricane1-3" = "Months 1-3",
+                  "Months_Since_Hurricane4-5" = "Months 4-5"),
+    Model = Model,
+    Estimate = estimate,
+    `Std. error` = std.error,
+    `T-value` = statistic,
+    `P-value` = p.value
+  ) %>%
+  select(Model, Term, Estimate, `Std. error`, `T-value`, `P-value`)
+
+# 14.5 Create kable with formatting
+param_table_clean_beta %>%
+  knitr::kable(
+    digits = 3,
+    col.names = c("Model", "Term", "Estimate", "Std. error", "T-value", "P-value"),
+    caption = "<strong>Table 4</strong>: Parametric coefficients from GAMs for Months Since Hurricane for Temporal Beta-diversity metrics (TBI, Losses, Gains). Intercepts not shown. Residual degrees of freedom for TBI, Losses, and Gaines are 14.9, 16.6, and 19.4.Parametric terms have 1 df each.",
+    format = "pandoc"
+  )
+
+
+```
+
+After accounting for environmental effects, residual impacts of hurricanes on benthic community composition were generally absent (**Table 4**). TBI showed small increases in months 1–3 and 4–5 post-hurricane, but neither change was statistically significant. Losses were slightly elevated in months 1–3 and declined in months 4–5, without significant effects. Gains increased in months 4–5 post-hurricane, with a marginal effect (p = 0.084). Thus, once environmental effects were accounted for, there was a modest tendency for compositional gains to increase β-diversity in the months following hurricane events.
+
+```{r}
+#| label: Compare the responses of abundance, alpha diversity (Hill numbers), and beta diversity (TBI/B/C)
+#| echo: false
+
+#15.1 Standardize the response variables
+
+sample_event_summary_std <- sample_event_summary %>%
+  mutate(
+    Abundance_z = scale(Abundance_mean),
+    Hill_q0_z   = scale(Hill_q0_mean),
+    Hill_q1_z   = scale(Hill_q1_mean),
+    Hill_q2_z   = scale(Hill_q2_mean),
+    TBI_z       = scale(TBI),
+    B_prop_z    = scale(B_prop),
+    C_prop_z    = scale(C_prop)
+  )
+
+#15.2 Fit models for each response
+
+
+# Alpha diversity (Hill numbers)
+gam_q0 <- gam(Hill_q0_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+              s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+              data = sample_event_summary_std, method = "REML")
+
+gam_q1 <- gam(Hill_q1_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+              s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+              data = sample_event_summary_std, method = "REML")
+
+gam_q2 <- gam(Hill_q2_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+              s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+              data = sample_event_summary_std, method = "REML")
+
+# Abundance
+gam_abun <- gam(Abundance_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+                s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+                data = sample_event_summary_std, method = "REML")
+
+# Beta diversity
+gam_TBI <- gam(TBI_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+               s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+               data = sample_event_summary_std, method = "REML")
+gam_B   <- gam(B_prop_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+               s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+               data = sample_event_summary_std, method = "REML")
+gam_C   <- gam(C_prop_z ~ s(mean_temp_C) + s(mean_salinity_ppt) + s(mean_DO_mg.L) +
+               s(mean_chlorophyll_ug.L) + Months_Since_Hurricane,
+               data = sample_event_summary_std, method = "REML")
+
+
+#15.3. Extract effect sizes
+
+extract_gam_effects <- function(gam_model, metric_name) {
+  sm <- summary(gam_model)
+  data.frame(
+    Metric = metric_name,
+    Term   = rownames(sm$s.table),
+    EDF    = sm$s.table[, "edf"],
+    F      = sm$s.table[, "F"],
+    p      = sm$s.table[, "p-value"]
+  )
+}
+
+effects_list <- list(
+  extract_gam_effects(gam_abun, "Abundance"),
+  extract_gam_effects(gam_q0, "Hill_q0"),
+  extract_gam_effects(gam_q1, "Hill_q1"),
+  extract_gam_effects(gam_q2, "Hill_q2"),
+  extract_gam_effects(gam_TBI, "TBI"),
+  extract_gam_effects(gam_B, "Losses"),
+  extract_gam_effects(gam_C, "Gains")
+)
+
+effects_table <- do.call(rbind, effects_list)
+
+
+
+#15.4 Function to extract hurricane effects from a GAM
+extract_hurricane_effects <- function(model, model_name) {
+  sm <- broom::tidy(model, parametric = TRUE)
+  
+  sm %>%
+    filter(grepl("Months_Since_Hurricane", term)) %>%  # keep only hurricane months
+    mutate(
+      Model = model_name,
+      EffectSize = abs(estimate / std.error)  # standardized effect size (t-value)
+    ) %>%
+    select(Model, term, estimate, std.error, statistic, p.value, EffectSize)
+}
+
+# 15.5 Apply to all relevant GAMs
+hurr_abun <- extract_hurricane_effects(gam_abun, "Abundance")
+hurr_q0   <- extract_hurricane_effects(gam_q0, "Richness (q=0)")
+hurr_q1   <- extract_hurricane_effects(gam_q1, "Hill-Shannon (q=1)")
+hurr_q2   <- extract_hurricane_effects(gam_q2, "Hill-Simpson (q=2)")
+hurr_TBI  <- extract_hurricane_effects(gam_TBI, "TBI")
+hurr_B    <- extract_hurricane_effects(gam_B_prop, "Losses (B-Components)")
+hurr_C    <- extract_hurricane_effects(gam_C_prop, "Gains (C-Components)")
+
+#15.6 Combine into one table
+hurricane_effects <- bind_rows(hurr_abun, hurr_q0, hurr_q1, hurr_q2, hurr_TBI, hurr_B, hurr_C)
+
+#15.7 Clean up term names for readability
+hurricane_effects <- hurricane_effects %>%
+  mutate(
+    Term = recode(term,
+                  "Months_Since_Hurricane1-3" = "Months 1-3",
+                  "Months_Since_Hurricane4-5" = "Months 4-5")
+  ) %>%
+  arrange(Model, Term)
+
+# 15.8 Prepare hurricane effects
+hurr_plot_data <- hurricane_effects %>%
+  mutate(
+    TermType = "Hurricane",
+    Metric = Model,
+    EffectLabel = Term,
+    Significance = ifelse(p.value <= 0.05, "Significant", "Not significant")
+  ) %>%
+  select(Metric, EffectLabel, estimate, std.error, Significance, TermType)
+
+# 15.9. Prepare environmental effects
+env_plot_data <- effects_table %>%
+  mutate(
+    TermType = "Environmental",
+    EffectLabel = Term,
+    Significance = ifelse(p <= 0.05, "Significant", "Not significant")
+  ) %>%
+  rename(estimate = F) %>%  # optionally use F as effect size; or use EDF
+  mutate(estimate = EDF) %>% # using EDF as approximate effect size if desired
+  select(Metric, EffectLabel, estimate, Significance, TermType)
+
+# 15.10. Combine datasets
+plot_data <- bind_rows(
+  hurr_plot_data %>% mutate(std.error = NA), # hurricane already has estimate
+  env_plot_data %>% mutate(std.error = NA)   # env effects don't need error bars
+)
+
+# 15.11 Standardize metric names
+plot_data <- plot_data %>%
+  filter(Metric != "Abundance") %>%
+  mutate(
+    Metric = recode(Metric,
+                    "Hill_q0" = "Richness (q=0)",
+                        "Hill Number q=0" = "Richness (q=0)",
+                    "Hill_q1" = "Hill-Shannon (q=1)",
+                      "Hill Number q=1" = "Hill-Shannon (q=1)",
+                    "Hill_q2" = "Hill-Simpson (q=2)",
+                        "Hill Number q=2" = "Hill-Simpson (q=2)",
+                    "Losses (B-Components)" = "Losses",
+                    "Gains (C-Components)" = "Gains"),
+    Metric = factor(Metric, levels = c(
+      "Richness (q=0)",
+      "Hill-Shannon (q=1)",
+      "Hill-Simpson (q=2)",
+      "TBI",
+      "Losses",
+      "Gains")),
+    EffectLabel = recode(EffectLabel,
+                          "s(mean_chlorophyll_ug.L)" = "Chloro",
+                          "s(mean_DO_mg.L)" = "DO",
+                          "s(mean_salinity_ppt)" = "Salinity",
+                          "s(mean_temp_C)" = "Temp",
+                          .default = EffectLabel),
+    EffectLabel = factor(EffectLabel, levels = c(
+      "Months 1-3",
+      "Months 4-5",
+      "Chloro",
+      "DO",
+      "Salinity",
+      "Temp")))
+
+# 15.12. Make the plot
+hurr2 <- ggplot(plot_data, aes(x = EffectLabel, y = estimate)) +
+  geom_point(aes(color = TermType, shape = Significance), size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = c("Hurricane" = "steelblue3", "Environmental" = "grey50")) +
+  scale_shape_manual(values = c("Not significant" = 15, "Significant" = 8)) +
+  facet_wrap(~Metric, ncol = 3) +
+  labs(
+    x = "Term",
+    y = "Effect size / EDF",
+    color = "Term Type",
+    shape = "Significance", 
+    title = "B"
+  ) +
+ theme_craig() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "right",
+    panel.border = element_rect(color = "grey20", fill = NA, linewidth = 0.5)
+  )
+
+
+```
+
+### Comparison of α- and β-Diversity
+
+Analysis of raw hurricane effects (without accounting for environmental variables) revealed that lower-order α-diversity metrics were most strongly impacted in the immediate months following disturbance (**Fig. 6A**). Hill number q = 0 declined significantly in months 1–3 and 4–5 post-hurricane. Hill number q = 1 decreased significantly in months 1–3 and showed a marginal, non-significant decline in months 4–5. Hill number q = 2 declined significantly in months 1–3 but not in months 4–5. In contrast, β-diversity metrics exhibited weaker or non-significant responses. TBI showed a small increase in months 4–5 but was not significant. Losses were slightly elevated in months 1–3 and decreased by months 4–5. Gains was the only β-diversity metric to show a significant and dramatic increase in months 4–5. Overall, α-diversity, responded most strongly to hurricane disturbance, whereas β-diversity responses were weaker with the exception of the longer term response of Gains.
+
+After accounting for environmental changes, hurricane effects were most pronounced in the immediate months following disturbance, particularly in lower-order diversity metrics (Fig. 6B). Hill number q = 0 and q = 1 exhibited the strongest short-term responses, with decreases in the first 1–3 months post-hurricane. TBI increases slightly after hurricane events, but hurricane-driven changes were not statistically significant (**Fig. 6**). Environmental factors had more selective effects: dissolved oxygen significantly influenced Hill q = 1, while temperature marginally affected TBI and Losses, and other variables (salinity, chlorophyll-a) were generally weak predictors across metrics.
+
+Overall, hurricanes produced the strongest immediate changes in α-diversity once accounting for environmental changes. Environmental variables contributed primarily to variation in turnover. This pattern is evident in the MDS ordination (**Fig. 6C**) visualizing the multivariate relationships among the metrics, environmental factors, and hurricane timing based on the correlation matrix of standardized response variables. α-diversity metrics (Hill numbers q = 0–2) and abundance clustered together in the negative direction along axis two, whereas hurricane timing was positive along the same axis, highlighting strong negative correlations between immediate post-hurricane periods and α-diversity. It is important to note that α-diversity metrics (Hill numbers q = 0–2) are strongly correlated with total abundance and each other, as reflected in the MDS clustering. Consequently, some of the observed short-term declines in α-diversity following hurricanes may partially reflect decreases in overall abundance, particularly for q = 1 and q = 2, which incorporate evenness. β-diversity metrics (TBI, Proportional Losses, Proportional Gains) separated along axis one in relation to environmental gradients: TBI and gains were positively associated with dissolved oxygen, chlorophyll-a, and salinity, whereas Losses were positively associated with temperature. Together, the results indicate hurricanes most strongly influence short-term α-diversity, while environmental factors contribute more selectively to turnover and community reassembly.
+
+```{r}
+#| label: Compare the responses of abundance, alpha diversity (Hill numbers), and beta diversity (TBI/B/C) w/o environment
+#| echo: false
+
+# 16.2 Fit GAMs for each response using only hurricane terms
+gam_abun_hurr <- gam(Abundance_z ~ Months_Since_Hurricane,
+                     data = sample_event_summary_std, method = "REML")
+
+gam_q0_hurr <- gam(Hill_q0_z ~ Months_Since_Hurricane,
+                   data = sample_event_summary_std, method = "REML")
+
+gam_q1_hurr <- gam(Hill_q1_z ~ Months_Since_Hurricane,
+                   data = sample_event_summary_std, method = "REML")
+
+gam_q2_hurr <- gam(Hill_q2_z ~ Months_Since_Hurricane,
+                   data = sample_event_summary_std, method = "REML")
+
+gam_TBI_hurr <- gam(TBI_z ~ Months_Since_Hurricane,
+                    data = sample_event_summary_std, method = "REML")
+
+gam_B_hurr <- gam(B_prop_z ~ Months_Since_Hurricane,
+                  data = sample_event_summary_std, method = "REML")
+
+gam_C_hurr <- gam(C_prop_z ~ Months_Since_Hurricane,
+                  data = sample_event_summary_std, method = "REML")
+
+
+# 16.3 Function to extract hurricane effect sizes
+extract_hurricane_effect_size <- function(gam_model, metric_name) {
+  broom::tidy(gam_model, parametric = TRUE) %>%
+    filter(grepl("Months_Since_Hurricane", term)) %>%
+    mutate(
+      Metric = metric_name,
+      Term = recode(term,
+                    "Months_Since_Hurricane1-3" = "Months 1-3",
+                    "Months_Since_Hurricane4-5" = "Months 4-5"),
+      EffectSize = abs(estimate / std.error),
+      Significance = ifelse(p.value <= 0.05, "Significant", "Not significant")
+    ) %>%
+    select(Metric, Term, estimate, std.error, EffectSize, p.value, Significance)
+}
+
+# 16.4 Apply function to all hurricane-only GAMs
+hurr_effect_q0   <- extract_hurricane_effect_size(gam_q0_hurr, "Richness (q=0)")
+hurr_effect_q1   <- extract_hurricane_effect_size(gam_q1_hurr, "Hill-Shannon (q=1)")
+hurr_effect_q2   <- extract_hurricane_effect_size(gam_q2_hurr, "Hill-Simpson (q=2)")
+hurr_effect_TBI  <- extract_hurricane_effect_size(gam_TBI_hurr, "TBI")
+hurr_effect_B    <- extract_hurricane_effect_size(gam_B_hurr, "Losses")
+hurr_effect_C    <- extract_hurricane_effect_size(gam_C_hurr, "Gains")
+
+# 16.5 Combine into a single table
+hurricane_effects_only <- bind_rows( hurr_effect_q0, hurr_effect_q1, hurr_effect_q2,
+  hurr_effect_TBI, hurr_effect_B, hurr_effect_C
+) %>%
+  arrange(Metric, Term)
+
+# 16.6 Reorder Metric factor levels
+hurricane_effects_only <- hurricane_effects_only %>%
+  mutate(
+    Metric = factor(Metric, levels = c(
+      "Richness (q=0)",
+      "Hill-Shannon (q=1)",
+      "Hill-Simpson (q=2)",
+      "TBI",
+      "Losses",
+      "Gains"
+    ))
+  ) %>%
+  arrange(Metric, Term)
+
+# 16.7 Make the plot
+hurr1 <- ggplot(hurricane_effects_only, aes(x = Term, y = estimate)) +
+  geom_point(aes(shape = Significance), size = 3, color="steelblue3") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_shape_manual(values = c("Not significant" = 15, "Significant" = 8)) +
+  facet_wrap(~Metric, nrow = 2) +
+  labs(
+    x = "Term",
+    y = "Effect size / EDF",
+    shape = "Significance",
+    title = "A"
+  ) +
+ theme_craig() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "right",
+    panel.border = element_rect(color = "grey20", fill = NA, linewidth = 0.5)
+  )
+
+
+
+```
+
+```{r}
+#| label: Figure 6 Hurricane Effects
+#| echo:  FALSE
+#| message: FALSE
+#| fig.cap: "<strong> Figure 6:</strong> Hurricane-driven and environmental effects on diversity metrics and their multivariate relationships. (A) GAM estimated effect sizes (EDF) of hurricane impacts on alpha diversity (Hill numbers q = 0, 1, 2), Total Beta Diversity (TBI), and taxonomic Gains and Losses, without accounting for environmental covariates. Asterisks indicate statistically significant responses. (B) GAM estimated effect sizes (EDF) from models that include environmental variables, showing how hurricane effects compare when abiotic drivers are incorporated. (C) Multidimensional scaling (MDS) ordination of correlations among diversity metrics, environmental variables, and hurricane timing."
+#| fig.align: center
+#| fig.width: 8
+#| fig.height: 11
+
+#madness
+
+# Encode Months_Since_Hurricane as numeric for correlations
+sample_event_summary_std <- sample_event_summary_std %>%
+  mutate(Months_Num = case_when(
+    Months_Since_Hurricane == "Pre" ~ 0,
+    Months_Since_Hurricane == "1-3" ~ 1,
+    Months_Since_Hurricane == "4-5" ~ 2
+  ))
+
+# Select variables
+cor_vars <- sample_event_summary_std %>%
+  select(
+    Abundance_z, Hill_q0_z, Hill_q1_z, Hill_q2_z,
+    TBI_z, B_prop_z, C_prop_z,
+    mean_temp_C, mean_salinity_ppt, mean_DO_mg.L, mean_chlorophyll_ug.L,
+    Months_Num
+  )
+
+#correlations
+cor_matrix <- cor(cor_vars, use = "pairwise.complete.obs")
+
+## Convert correlation to distance
+dist_matrix <- as.dist(1 - cor_matrix)  # 1 - correlation for distance
+
+# Classical MDS
+mds_res <- cmdscale(dist_matrix, k = 2, eig = TRUE)
+
+mds_df <- data.frame(
+  Dim1 = mds_res$points[,1],
+  Dim2 = mds_res$points[,2],
+  Variable = rownames(cor_matrix)
+)
+
+
+mds_df <- mds_df %>%
+  mutate(
+    VariableLabel = recode(Variable,
+      "Abundance_z" = "Abundance",
+      "Hill_q0_z" = "Richenss (q=0)",
+      "Hill_q1_z" = "Hill-Shannon (q=1)",
+      "Hill_q2_z" = "Hill-Simpson (q=2)",
+      "TBI_z" = "TBI",
+      "B_prop_z" = "Losses",
+      "C_prop_z" = "Gains",
+      "Months_Num" = "Months Since Hurricane",
+      "mean_temp_C" = "Temperature",
+      "mean_salinity_ppt" = "Salinity",
+      "mean_DO_mg.L" = "Dissolved Oxygen",
+      "mean_chlorophyll_ug.L" = "Chlorophyll-a",
+      .default = Variable
+    ),
+    Type = case_when(
+      Variable %in% c("Abundance_z", "Hill_q0_z", "Hill_q1_z", "Hill_q2_z") ~ "Alpha diversity",
+      Variable %in% c("TBI_z", "B_prop_z", "C_prop_z") ~ "Beta diversity",
+      Variable %in% c("Months_Num") ~ "Hurricane timing",
+      TRUE ~ "Environmental"
+    )
+  )
+
+# Plot
+mds_hurr<-ggplot(mds_df, aes(x = Dim1, y = Dim2, label = VariableLabel, color = Type)) +
+  geom_point(size = 3) +
+  geom_text_repel() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  labs(x = "MDS 1", y = "MDS 2", color = "Variable Type", title="C") +
+  scale_color_manual(values = c(
+    "Alpha diversity" = "aquamarine4",
+    "Beta diversity" = "brown4",
+    "Environmental" = "grey50",
+    "Hurricane timing" = "steelblue3"
+  )) +
+  theme_craig() +
+  theme(
+    legend.position = "right",
+    panel.border = element_rect(color = "grey20", fill = NA, linewidth = 0.5)
+  )
+
+
+# Arrange with custom widths/heights
+grid.arrange(hurr1, hurr2, mds_hurr, nrow=3)
+```
+
+## Discussion
+
+Overall, we find that high-intensity hurricanes exert strong but differential effects on benthic community α- and β-diversity, with α-diversity responding most rapidly to acute disturbance and β-diversity reflecting slower, environmentally mediated reassembly. Across hurricanes, α-diversity declined sharply in the first one to three months following hurricanes across all Hill diversities (**Fig. 3**). These recovery trajectories varied: some rebounded to pre-hurricane levels within six months or more, occasionally exceeding previous values, as observed after Hurricane Barry (**Fig. 2),** while others had more modest recoveries such as after Hurricane Laura. The observed declines in α-diversity and changes in β-diversity likely reflect the interplay of multiple ecological processes, including disturbance-driven mortality, niche filtering, and species interactions [@myers2015; @sutton2021; @reyes2010; @dornelas2010; @sousa1984]. Sharp declines in α-diversity may reflect direct mortality and physical displacement of benthic organisms [@sousa1984], while stronger responses in Hill diversities that emphasize evenness (q = 1, 2) suggest disproportionate losses of previously abundant species or shifts in competitive hierarchies [@nashsuding2001; @yeboah2016; @engle2008] (**Table 2**). Loss-driven increases in β-diversity following intense storms likely reflects immediate turnover due to mortality and habitat modification [@allison2005; @corte2017]. Delayed gain-driven increases in β-diversity changes point to recolonization or opportunistic species establishment facilitated by competitive release [@montagna2023]. The lack of strong environmental predictors for gains-driven changes in β-diversity suggests that post-disturbance colonization may be more stochastic or influenced by unmeasured factors such as larval supply, substrate availability, or local connectivity [@siegel2008; @cowen2009; @carnaúba2023]. Collectively, these patterns indicate that hurricanes restructure benthic communities through a combination of immediate mortality, competitive release, and selective recolonization.
+
+### Repeated Hurricane Impacts
+
+Responses to high-intensity hurricanes were not uniform across events, highlighting the importance of storm dynamics [@smith2009] and potentially pre-existing community conditions in shaping benthic assemblages [@fukami2015]. Hurricane Zeta, which was a fast-moving storm, produced abrupt but short-lived changes. In contrast, Hurricane Ida, a slower and more intense hurricane, produced more prolonged alterations in community structure. The strongest α-diversity reductions occurred following Barry and Ida, whereas Laura, Delta, and Zeta produced little response (**Fig. 2**). Temporal β-diversity exhibited distinct pulses following hurricane events (**Fig. 4**). Both Barry and Ida induced strong Loss-driven turnover with delayed Gain-driven changes. Barry likely caused substantial impacts due to its large water and sediment displacement despite being a Category 1 storm, while Ida’s slow movement and high intensity contributed to pronounced community effects. However, these factors alone do not fully explain the patterns: Zeta, a direct Category 3 hurricane, elicited changes in β-diversity but had little effect on α-diversity, suggesting that the magnitude of compositional turnover does not always coincide with species richness loss.
+
+The differential responses to hurricanes may reflect the interplay of multiple and often stochastic assembly mechanisms [@siegel2008; @fukami2015; @vellend2010] modulated by storm-specific characteristics [@sousa; @smith2009]. Immediate α-diversity declines following Barry and Ida likely resulted from direct mortality of sensitive benthic taxa due to physical disturbance, sediment burial, and hypoxia associated with rapid sediment resuspension and water column mixing [@balthis2006; @hendrick2016; @bianucci2018; @montagna2023]. In contrast, storms with shorter duration or more oblique trajectories, such as Zeta, caused rapid but transient alterations in community composition without substantially reducing species richness, suggesting that many taxa experienced sub-lethal stress or were able to persist through behavioral or microhabitat refuges [@thrush2002; @pagès2013]. The strong Loss-driven turnover observed in β-diversity metrics following Barry and Ida indicates that species extirpation was a major driver of compositional change, whereas delayed Gain-driven signals likely reflect recolonization from nearby undisturbed habitats or propagule banks [@segura-garcía2024; @montagna2023]. Zeta’s effects, which primarily altered β-diversity without a corresponding α-diversity decline, highlight that changes in relative abundance, reordering of common taxa, and recruitment dynamics can drive community reorganization independently of species loss.
+
+### Pulse and Press Drivers
+
+Hurricanes acted as acute pulse disturbances, producing immediate but variable impacts on benthic communities, while ongoing environmental conditions exerted longer-term press effects that modulated compositional dynamics (**Table 1 & 3**). α-Diversity responded most strongly to pulse effects, e.g.. rapid sediment deposition, hydrodynamic stress, and abrupt habitat alteration, that led to local extinctions and sharp reductions in species richness and evenness in the first months following hurricanes. Environmental variables—particularly salinity, dissolved oxygen, and chlorophyll-a—also influenced α-diversity, suggesting that post-disturbance water quality and resource availability can either amplify or buffer the immediate effects of hurricanes [@li2023; @huang2020; @blum2023]. In contrast, β-diversity reflected a combination of pulse and press influences. Hurricanes triggered observable turnover, but that compositional change was likely through hurricane-induced changes and resetting in the environment, including temperature and dissolved oxygen, indicating that community reorganization is strongly mediated by the physical and chemical context in which disturbances occur.
+
+These dynamics illustrate how pulse and press drivers may operate over different temporal scales and through distinct ecological mechanisms. Pulse disturbances reset α-diversity via immediate mortality and non-selective loss of species, producing abrupt shifts in community structure. The trajectory of β-diversity reflects. at least in part, pulse and press effects interacting to filter species according to environmental tolerances to influence the pace and direction of compositional turnover. Together, these results highlight the interplay between acute pulse disturbances and chronic press drivers in structuring coastal benthic communities, emphasizing that resilience and compositional recovery are contingent on both disturbance intensity and the prevailing environmental context.
+
+### Divergent Diversity Responses
+
+To reiterate, our findings suggest that α- and β-diversity respond on distinct temporal scales to pulse disturbances such as hurricanes, with richness declining almost immediately and compositional turnover occurring more gradually. The key insight lies in the underlying ecological mechanisms shaping these responses. Immediate reductions in α-diversity reflect the classic effects of acute disturbance: direct mortality, physical displacement, and habitat homogenization that indiscriminately remove species through density-dependent effects [@sousa1984; @dornelas2010; @reyes2010; @myers2015; @sutton2021]. These rapid losses act as a reset, reducing local species pools and effectively creating open niches that can be colonized by opportunistic taxa [@sousa1984; @reyes2010], consistent with classic disturbance-recovery patterns observed in benthic systems [@montagna2023]. In contrast, β‑diversity responses integrate both the legacy of these immediate losses and the selective pressures imposed by changing environmental conditions, reflecting a combination of niche reorganization, priority effects, and species-specific recovery dynamics [@dornelas2010; @myers2015; @symons2014]. Gains observed in the medium term (\<6 months) likely represent stochastic colonization events and the filling of vacated functional niches, consistent with predictions from metacommunity theory and reassembly frameworks [@sutton2021; @urban2009; @leibold2004]. From a theoretical perspective, these findings align with the pulse–press framework, which posits that pulse events produce abrupt reductions in local abundance and richness, while press effects—including chronic temperature fluctuations, dissolved oxygen gradients, and altered nutrient regimes—constrain the trajectory of community reassembly and turnover [@collins2010; @collins2016; @bender1984; @inamine2022].
+
+The divergence in environmental correlates between α- and β-diversity reflects differences in the ecological processes governing local richness versus community composition. α-diversity is highly sensitive to local-scale conditions that directly affect individual survival, reproduction, and abundance, such as salinity fluctuations, dissolved oxygen, and chlorophyll‑a concentrations, because these variables influence physiological stress, resource availability, and habitat suitability for individual taxa [@momtazi2024; @gray2002]. For example, salinity gradients can exclude species with narrow osmotic tolerances, dissolved oxygen affects aerobic metabolism and survival thresholds, and chlorophyll‑a, as a proxy for primary productivity, influences consumer richness via bottom-up effects—sites with high productivity can support more species, whereas extreme productivity can favor opportunistic dominance [@mrozinska2021; @vandiggelen2016; @levin2009; @evans2005]. Hurricanes generate acute pulse disturbances that reset local α-diversity through mortality or displacement, reflecting immediate physiological and demographic constraints. In contrast, β-diversity captures spatial and temporal turnover among communities and is shaped by broader-scale or cumulative gradients, including temperature and dissolved oxygen, which govern colonization, differential species recovery, and niche sorting across habitats [@chin2018]. Temperature drives metabolic rates, life history timing, and seasonal turnover, while dissolved oxygen influences which taxa persist across sites [@brown2004; @wan2024; @chu2018]. β-diversity therefore responds more gradually to environmental change, integrating both hurricane-induced environmental change and longer-term press effects. This decoupling illustrates that α-diversity reflects immediate local constraints, whereas β-diversity captures broader community reorganization driven by both environmental filtering and disturbance legacies.
+
+Two marked spikes in α- and β-diversity occurred outside the immediate post-storm periods, while these could reflect delayed post-hurricane recovery, other ecological processes may have contributed to this temporal variation in the benthic community. For example, March 2020 exhibited dramatic increases in abundance and all Hill diversities, while December 2019 and 2020 showed pronounced spikes in TBI and gains alongside declines in losses. Similar patterns were observed in March 2022, with short-term increases in abundance and lower-order Hill diversities, followed by declines in higher-order Hill diversities (which increasingly emphasizes evenness while deemphasizing richness and, to a lesser extent, total abundance) and transient surges in TBI and gains. These patterns are consistent with seasonal recruitment pulses, where early-spring settlement of juveniles temporarily elevates richness and evenness, and with stochastic environmental fluctuations such as freshwater influxes, nutrient pulses, or temperature shifts that can alter competitive hierarchies and species turnover. Notably, these diversity spikes occurred in the months immediately preceding the two most impactful hurricanes, suggesting that some of these changes may reflect species opportunistically filling niche space vacated following hurricane-induced local extinctions.
+
+Several additional caveats warrant consideration when interpreting the observed patterns of α- and β-diversity. First, sampling frequency and timing may obscure the full temporal dynamics of pulse disturbances; short-lived spikes in abundance or diversity could be missed between sampling events, potentially biasing estimates of immediate post-hurricane responses. Second, unmeasured environmental factors—such as sediment deposition, nutrient pulses, microhabitat heterogeneity, or hydrodynamic changes—could drive diversity fluctuations independently of hurricane impacts, particularly in periods preceding major storms. These environmental fluctuations may interact with hurricane-driven pulses, amplifying or damping observed effects. Third, stochastic processes including random colonization, local extinction, or demographic variability may contribute to observed shifts in α- and β-diversity, producing patterns that superficially resemble hurricane effects but are driven by intrinsic community dynamics. Despite these potential sources of uncertainty, the robustness of the observed patterns across multiple diversity metrics, temporal windows, and hurricane events suggests that the major conclusions remain well-supported. The decoupling of α- and β-diversity responses, the pronounced short-term loss in species richness, and the delayed compositional turnover align with both classical ecological theory on disturbance and recovery [@sousa1984; @connell1978; @turner1998] and more recent frameworks emphasizing pulse–press interactions and community reassembly [@lake2000; @harris2018; @inamine2022]. By acknowledging these caveats, the results emphasize the need for integrating high-frequency monitoring, environmental covariates, and mechanistic understanding of species-specific responses to disentangle the relative contributions of stochasticity, pulse disturbances, and ongoing press effects in structuring coastal benthic communities.
+
+### Conclusions
+
+Our findings that hurricanes act as acute pulse disturbances causing immediate reductions in α-diversity, while β-diversity responds more gradually to both pulse and press effects, align with and extend prior observations from benthic studies. Montagna [@montagna2023] and Hughes et al. [@hughes2009] reported rapid post-hurricane declines in benthic abundance and richness, followed by recovery within months, highlighting the resilience of local communities. Similarly, previous findings documented abrupt losses in taxa and diversity due to salinity and oxygen stress from storm surges [@poirrier2008; @engle2008], paralleling our finding that environmental factors modulate immediate pulse responses. In contrast, some studies [@taghon2016] report minimal changes in α-diversity following hurricanes when hydrological conditions remain stable suggesting that the intensity of pulse effects is context-dependent and mediated by local environmental gradients. β-Diversity responses in our study, structured by temperature and dissolved oxygen, are echoed in Mallin et al. [@mallin1999] and Balthis et al. [@balthis2006], where hurricane-induced shifts in community composition were linked to broader-scale environmental changes and the interaction with anthropogenic stressors. Differences in recovery trajectories across these studies may reflect variation in disturbance severity, pre-storm community composition, and the degree of habitat modification, explaining why some studies [@posey2002; @fourqurean2004] observed longer-lasting compositional effects in areas with extreme sediment deposition or habitat loss. Overall, our results support the notion that while α-diversity is most sensitive to immediate, local-scale mortality and habitat alteration, β-diversity integrates longer-term press effects and environmental filtering, highlighting the importance of considering both diversity metrics to fully capture ecosystem responses to hurricanes.
+
+Collectively, these findings reveal that α- and β-diversity respond differently to repeated disturbances. In summary, we demonstrate that repeated, high-intensity hurricanes exert strong, immediate effects on benthic α-diversity while driving more gradual and environmentally mediated changes in β-diversity, highlighting the decoupled temporal responses of richness and community composition. Hurricanes act as pulse disturbances that rapidly reduce species richness and alter abundances, whereas compositional turnover is shaped by a combination of disturbance-driven environmental resetting and longer-term press effects, such as temperature, dissolved oxygen, and nutrient dynamics. Richness losses alone may underestimate ecosystem disruption, whereas delayed compositional changes can have cascading effects on functional diversity, trophic interactions, and ecosystem services. In addition, the magnitude and timing of these effects vary across storms, reflecting differences in intensity, duration, and directness of impact. In a world of increasing storm frequency and intensity, understanding how benthic communities reorganize in response to repeated disturbances provides critical insight into the persistence, adaptability, and long-term stability of coastal ecosystems. By linking immediate post-disturbance dynamics with longer-term environmental modulation, this work contributes to a predictive framework for anticipating ecological consequences of extreme events and informs strategies for monitoring, conserving, and restoring vulnerable coastal communities.
+
+### Acknowledgements
+
+We are grateful to Mark Genung, whose sophisticated review of our presubmission draft provided the keen intellectual polish and critical insight that brought the final manuscript into focus. The heavy lifting of early field sampling and processing was expertly navigated by the tireless trio of S. River Bryant, Granger Hanks, and Clifton Nunnally. Special thanks go to Michelle Gaither-McClain, for proving that true love means gracefully enduring the first author’s long-winded technical rants and late-night scientific 'breakthroughs' that were mostly just caffeine-induced. Deep gratitude is extended to the first author's dog JuJu, who kept him grounded by giving him side eye and chuffing at his research breakthroughs and reminding him that the only thing that actually matters is dinner being served exactly on time. Her cynical presence was a necessary counterweight to academic idealism.
