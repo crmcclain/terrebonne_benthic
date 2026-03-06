@@ -1,0 +1,115 @@
+﻿Species ID,Group,Phylum,Class,Order,Family,Genus,Species,Synonomies,Zooscan,Body Size,Notes
+Biv-1,Bivalvia,Mollusca,Bivalvia,Nuculanida,Nuculanidae,Nuculana,concentrica,,Yes,,
+Biv-2,Bivalvia,Mollusca,Bivalvia,Cardiida,Tellinidae,Macoma,sp,,Yes,,
+Biv-3,Bivalvia,Mollusca,Bivalvia,Venerida,Mactridae,Mulinia ,lateralis,"Biv-8, Biv-19",Yes,,
+Biv-4,Bivalvia,Mollusca,Bivalvia,Pholadomyoida,Pandoridae,Pandora,trilineata,,Yes,,
+Biv-5,Bivalvia,Mollusca,Bivalvia,Venerida,Veneridae,Gemma,gemma,,Yes,,
+Biv-6,Bivalvia,Mollusca,Bivalvia,Cardiida,Semelidae,Abra,aequarlis,,Yes,,
+Biv-7,Bivalvia,Mollusca,Bivalvia,Cardiida,Tellinidae,Macoma,sp,,Yes,,
+Biv-9,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,elliptical distinctive hinge
+Biv-10,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,hachet head bivalve
+Biv-12,Bivalvia,Mollusca,Bivalvia,Galeommatida,Lasaeidae,Mysella,planulata,,Yes,,
+Biv-13,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-14,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-15,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-16,Bivalvia,Mollusca,Bivalvia,Adapedonta,Pharidae,,,,Yes,,
+Biv-17,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-18,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-20,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Biv-21,Bivalvia,Mollusca,Bivalvia,,,,,,Yes,,
+Gas-1,Gastropda,Mollusca,Gastropda,Cephalaspidea,Tornatinidae,Acteocina,canaliculata,,Yes,,
+Gas-2,Gastropda,Mollusca,Gastropda,Neogastropoda,Nassariidae,Nassarius,acutus,,,,
+Gas-3,Gastropda,Mollusca,Gastropda,Neogastropoda,Columbellidae,Parvanachis,ostreicola,,,,
+Gas-4,Gastropda,Mollusca,Gastropda,,,,,,,,maybe moon snail juv
+Gas-5,Gastropda,Mollusca,Gastropda,,,,,,,,Turbonilla shape
+Gas-6,Gastropda,Mollusca,Gastropda,,,,,,,,
+Gas-7,Gastropda,Mollusca,Gastropda,,,,,,,,
+Gas-8,Gastropda,Mollusca,Gastropda,,,,,,,,
+Gas-9,Gastropda,Mollusca,Gastropda,,,,,,,,
+Gas-10,Gastropda,Mollusca,Gastropda,,,,,Holo-3,,,
+Gas-11,Gastropda,Mollusca,Gastropda,,,,,,,,limpet
+Oph-1,Ophiuroidea,Echinodermata,Ophiuroidea,,,,,,,,brittle star
+Oph-2,Ophiuroidea,Echinodermata,Ophiuroidea,,,,,,,,brittle star
+Oph-3,Ophiuroidea,Echinodermata,Ophiuroidea,,,,,,,,brittle star
+Hol-1,Holothuroidea,Echinodermata,Holothuroidea,,,,,,,,miny sea pig
+Hol-2,Holothuroidea,Echinodermata,Holothuroidea,,,,,,,,
+Cri-1,Crinoidea,Echinodermata,Crinoidea,,,,,,,,unstalked crinoid
+Poly-1,Polychaeta,Annelida,Polychaeta,Terebellida ,Melinnidae ,Melinna,maculata,"Poly-A1, Poly-J1, Poly-23, Poly-47",,,fairly confident that species is correct since there is only one species of of Melinna occuring in shallow GoM waters
+Poly-2,Polychaeta,Annelida,Polychaeta,Eunicida ,Lumbrineridae,,,"Poly-A2, Poly-E1, Poly-E2, Poly-J4, Poly-13",,,"fairly confident, but very similar to its sister group Oenonidae "
+Poly-3,Polychaeta,Annelida,Polychaeta,Capitellida,Capitellidae ,Capitella ,capitata,"Poly-A3, Poly-D3, Poly-12, Poly-50",,,often small and degraded
+Poly-4,Polychaeta,Annelida,Polychaeta,Phyllodocida ,Glyceridae,Glycera,americana,Poly-A4,,,"""gonzo"""
+Poly-6,Polychaeta,Annelida,Polychaeta,,,,,"Poly-B2, Poly-J3",,,
+Poly-7,Polychaeta,Annelida,Polychaeta,,,,,Poly-B3,,,
+Poly-9,Polychaeta,Annelida,Polychaeta,Cirratulida,Paraonidae,Aricidea,sp,"Poly-C3, Poly-F1, Poly-G3, Poly-G4, Poly-H3, Poly-16, Poly-48, Poly-54",,,"""beautiful"""
+Poly-11,Polychaeta,Annelida,Polychaeta,Capitellida,Maldanidae,,,"Poly-D2, Poly-N1, Poly-N2, Poly-36",,,cone tail
+Poly-14,Polychaeta,Annelida,Polychaeta,,,,,Poly-E3,,,
+Poly-15,Polychaeta,Annelida,Polychaeta,,,,,Poly-E4,,,
+Poly-17,Polychaeta,Annelida,Polychaeta,Phyllodocida,Nereididae,,,"Poly-F2, Poly-F4, Poly-43",,,
+Poly-18,Polychaeta,Annelida,Polychaeta,Terebellida,Pectinaridae,,,Poly-F3,,,
+Poly-20,Polychaeta,Annelida,Polychaeta,,,,,"Poly-G2, Poly-I1",,,
+Poly-21,Polychaeta,Annelida,Polychaeta,incertae sedis,Orbiinidae,,,"Poly-H1, Poly-K4, Poly-10, Poly-27",,,fuzzy appearance
+Poly-22,Polychaeta,Annelida,Polychaeta,Phyllodocida,Polynoidae,,,"Poly-I4, Poly-33",,,
+Poly-25,Polychaeta,Annelida,Polychaeta,Cossurida ,Cossuridae ,Cossura ,delta or soyeri,"Poly-K1, Poly-M4, Poly-53",,,charactersitic long mid-dorsal branchia; there are only 2 species of Cossura occuring in shallow GoM waters
+Poly-26,Polychaeta,Annelida,Polychaeta,,,,,"Poly-K3, Poly-52",,,
+Poly-29,Polychaeta,Annelida,Polychaeta,,,,,"Poly-L3, Poly-M3, Poly-32",,,
+Poly-30,Polychaeta,Annelida,Polychaeta,,,,,"Poly-L4, Poly-M1",,,
+Poly-31,Polychaeta,Annelida,Polychaeta,Capitellida,,,,Poly-M2,,,
+Poly-34,Polychaeta,Annelida,Polychaeta,,,,,Poly-45,,,
+Poly-35,Polychaeta,Annelida,Polychaeta,Capitellida,Maldanidae,,,,,,
+Poly-37,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-38,Polychaeta,Annelida,Polychaeta,Terebellida,Cirratulidae,,,Poly-56,,,
+Poly-39,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-40,Polychaeta,Annelida,Polychaeta,Spionida ,Chaetopteridae ,Mesochaetopterus or Spiochaetopterus ,sp,,,,
+Poly-41,Polychaeta,Annelida,Polychaeta,,,,,"Poly-B1, Poly-L1, Poly-5,  Poly-28",,,has long fuzzy feeding palp
+Poly-42,Polychaeta,Annelida,Polychaeta,incertae sedis,Orbiniidae,Leitoscoloplos,fragilis,"Poly-L5, Poly-62",,,not positive - id based on photo that I randomly came across when trying to ID different poly. But pretty positive the family is correct. Depth range is correct 
+Poly-44,Polychaeta,Annelida,Polychaeta,,,,,Poly-61,,,
+Poly-46,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-49,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-51,Polychaeta,Annelida,Polychaeta,Phyllodocida,Phyllodocidae,,,,,,
+Poly-55,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-57,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-58,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-59,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-60,Polychaeta,Annelida,Polychaeta,Capitellida,Maldanidae,,,,,,
+Poly-63,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-64,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Poly-65,Polychaeta,Annelida,Polychaeta,,,,,,,,
+Oli-1,Oligochaeta,Annelida,Clitellata,,,,,,,,
+Sip-1,Sipuncula,Annelida,Sipuncula,,,,,,,,often in gastropod shells
+Sip-2,Sipuncula,Annelida,Sipuncula,,,,,,,,very small
+Echi-1,Echiura,Annelida,Echiura,,,,,,,,spoon worm
+Nem-1,Nemertea,Nemertea,,,,,,"Poly-J2, Poly-M5, Poly-8, Poly-19, Nem-2, Nem-4",,,long coiled proboscis
+Nem-3,Nemertea,Nemertea,,,,,,,,,often found in tubes
+Plat-1,Platyhelminthes,Platyhelminthes,,,,,,,,,very small
+Kino-1,Kinoryncha,Kinoryncha,,,,,,,,,very small
+Por-1,Porifera,Porifera,,,,,,Sponge-1,,,hariy little ball
+Bry-1,Bryozoa,Bryozoa,,,,,,,N/A,,branching
+Bry-2,Bryozoa,Bryozoa,Gymnolaemata,Cheilostomata,Membraniporidae,Conopeum, tenuissimum,,N/A,,encrusting
+Bry-3,Bryozoa,Bryozoa,,,,,,,N/A,,mossy
+Bry-4,Bryozoa,Bryozoa,,,,,,,N/A,,encrusting
+Pho-1,Phoronida,Phoronida,,,,,,,,,
+Hyd-1,Hydrozoa,Cnidaria,Hydrozoa,,,,,,,,found on shells
+Hyd-2,Hydrozoa,Cnidaria,Hydrozoa,,,,,,,,silky
+Hyd-3,Hydrozoa,Cnidaria,Hydrozoa,,,,,,,,stalking
+Hyd-4,Hydrozoa,Cnidaria,Hydrozoa,,,,,,,,dense
+Hala-1,Halacaridae,Arthropoda,Arachnida,Trombidiformes,Halacaridae,,,,,,
+Hala-2,Halacaridae,Arthropoda,Arachnida,Trombidiformes,Halacaridae,,,,,,
+Hala-3,Halacaridae,Arthropoda,Arachnida,Trombidiformes,Halacaridae,,,,,,
+Amph-1,Amphipoda,Arthropoda,Malacostraca,Amphipoda,Ampeliscidae,Ampelisca,sp,,Yes,,
+Amph-2,Amphipoda,Arthropoda,Malacostraca,Amphipoda,Lysianassidae,Lysianopsis,alba,,Yes,,
+Amph-3,Amphipoda,Arthropoda,Malacostraca,Amphipoda,,,,,Yes,,
+Amph-4,Amphipoda,Arthropoda,Malacostraca,Amphipoda,Caprellidae,,,,Yes,,skeleton shrimp
+Amph-5,Amphipoda,Arthropoda,Malacostraca,Amphipoda,,,,,Yes,,has boxing gloves
+Deca-1,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,hermit crab
+Deca-2,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,stone crab
+Deca-3,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,shrimp
+Deca-4,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,shrimp
+Deca-5,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,megolops
+Deca-6,Decapoda,Arthropoda,Malacostraca,Decapoda,,,,,Yes,,blue crab
+Cum-1,Cumacea,Arthropoda,Malacostraca,Cumacea,,,,,Yes,,
+Cum-2,Cumacea,Arthropoda,Malacostraca,Cumacea,Diastylidae ,Oxyurostylis,smithi ,,Yes,,
+Cum-3,Cumacea,Arthropoda,Malacostraca,Cumacea,,,,,Yes,,
+Euph-1,Euphausiacea,Arthropoda,Malacostraca,Euphausiacea,,,,,IP,,krill
+Iso-1,Isopoda,Arthropoda,Malacostraca,Isopoda,,,,,,,
+Iso-2,Isopoda,Arthropoda,Malacostraca,Isopoda,,,,,,,
+Iso-3,Isopoda,Arthropoda,Malacostraca,Isopoda,,,,,,,
